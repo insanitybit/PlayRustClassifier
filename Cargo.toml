@@ -1,0 +1,8 @@
+[package]
+name = "playrust_alert"
+version = "0.1.0"
+authors = ["insanitybit <insanitybit@gmail.com>"]
+
+[dependencies]
+hyper = "*"
+serde_json = "*"
