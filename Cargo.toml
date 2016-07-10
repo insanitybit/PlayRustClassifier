@@ -1,8 +1,19 @@
 [package]
+authors = ["insanitybit <insanitybit@gmail.com>"]
 name = "playrust_alert"
 version = "0.1.0"
-authors = ["insanitybit <insanitybit@gmail.com>"]
 
 [dependencies]
-hyper = "*"
-serde_json = "*"
+clap = "2.9.2"
+csv = "0.14.*"
+hyper = "0.9.*"
+ndarray = "*"
+rayon = "0.4.0"
+rustc-serialize = "*"
+serde = "0.7.*"
+serde_json = "0.7.*"
+serde_macros = "0.7.*"
+stopwatch = "*"
+
+[dependencies.rsml]
+path = "../rsml/"
