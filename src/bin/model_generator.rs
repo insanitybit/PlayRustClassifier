@@ -9,10 +9,13 @@ extern crate rsml;
 extern crate csv;
 extern crate rustc_serialize;
 extern crate playrust_alert;
+extern crate tfidf;
 
+use tfidf::{TfIdf, TfIdfDefault};
 use clap::{Arg, App};
 use rsml::random_forest::model::*;
 use rsml::traits::SupervisedLearning;
+use rsml::tfidf_helper::*;
 use playrust_alert::reddit::RawPostFeatures;
 
 #[derive(Deserialize, Debug, Clone, RustcEncodable)]
@@ -65,6 +68,15 @@ fn convert_author_to_popularity(authors: &[&str]) -> Vec<f64> {
 }
 
 fn tfidf_reduce_selftext(self_texts: &[&str]) -> Vec<f64> {
+    let unique_word_list = get_unique_word_list(&self_texts[..]);
+    let docs: Vec<_> = self_texts.iter().map(|s| str_to_doc(s)).collect();
+    let all_docs = docs.clone();
+
+    for doc in docs.into_iter() {
+        for word in &unique_word_list {
+            let x = TfIdfDefault::tfidf(word, &doc, all_docs.iter());
+        }
+    }
     unimplemented!()
 }
 
