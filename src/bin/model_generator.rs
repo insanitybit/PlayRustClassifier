@@ -67,17 +67,23 @@ fn convert_author_to_popularity(authors: &[&str]) -> Vec<f64> {
     unimplemented!()
 }
 
-fn tfidf_reduce_selftext(self_texts: &[&str]) -> Vec<f64> {
-    let unique_word_list = get_unique_word_list(&self_texts[..]);
+// Generate the full list of words and export it.
+// TODO: This should probably return an ndarray
+fn tfidf_reduce_selftext(self_texts: &[&str], words: &[&str]) -> Vec<Vec<f64>> {
     let docs: Vec<_> = self_texts.iter().map(|s| str_to_doc(s)).collect();
     let all_docs = docs.clone();
+    let mut term_frequency_matrix = Vec::with_capacity(self_texts.len());
 
     for doc in docs.into_iter() {
-        for word in &unique_word_list {
-            let x = TfIdfDefault::tfidf(word, &doc, all_docs.iter());
-        }
+        let term_frequencies: Vec<_> = words.iter()
+                                            .map(|word| {
+                                                TfIdfDefault::tfidf(word, &doc, all_docs.iter())
+                                            })
+                                            .collect();
+        term_frequency_matrix.push(term_frequencies);
     }
-    unimplemented!()
+
+    term_frequency_matrix
 }
 
 fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> Vec<ProcessedPostFeatures> {
@@ -86,13 +92,25 @@ fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> Vec<ProcessedPostFe
     let downs: Vec<_> = raw_posts.iter().map(|r| r.downs as f64).collect();
     let ups: Vec<_> = raw_posts.iter().map(|r| r.ups as f64).collect();
     let score: Vec<_> = raw_posts.iter().map(|r| r.score as f64).collect();
-
     let authors: Vec<&str> = raw_posts.iter().map(|r| r.author.as_ref()).collect();
-    let author_popularity = convert_author_to_popularity(&authors[..]);
     let posts: Vec<&str> = raw_posts.iter().map(|r| r.selftext.as_ref()).collect();
-    let tfidf_reduction = tfidf_reduce_selftext(&posts[..]);
-    unimplemented!()
 
+    let unique_word_list = get_unique_word_list(&posts[..]);
+    // TODO: Write the unique_word_list out to a file
+    let tfidf_reduction = tfidf_reduce_selftext(&posts[..], &unique_word_list[..]);
+
+
+    let author_popularity = convert_author_to_popularity(&authors[..]);
+    assert_eq!(selfs.len(), raw_posts.len());
+    assert_eq!(downs.len(), raw_posts.len());
+    assert_eq!(ups.len(), raw_posts.len());
+    assert_eq!(score.len(), raw_posts.len());
+    assert_eq!(authors.len(), raw_posts.len());
+    assert_eq!(author_popularity.len(), raw_posts.len());
+    assert_eq!(posts.len(), raw_posts.len());
+    assert_eq!(tfidf_reduction.len(), raw_posts.len());
+
+    unimplemented!()
 }
 
 
