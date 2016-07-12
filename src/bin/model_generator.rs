@@ -16,6 +16,8 @@ use clap::{Arg, App};
 use rsml::random_forest::model::*;
 use rsml::traits::SupervisedLearning;
 use rsml::tfidf_helper::*;
+use std::fs::File;
+use std::io::prelude::*;
 use playrust_alert::reddit::RawPostFeatures;
 
 #[derive(Deserialize, Debug, Clone, RustcEncodable)]
@@ -36,7 +38,7 @@ pub struct ProcessedPostFeatures {
     pub word_freq: Vec<f64>,
 }
 
-fn get_train_csv() -> String {
+fn get_train_data() -> Vec<RawPostFeatures> {
     let matches = App::new("Model Generator")
                       .version("1.0")
                       .about("Generates a random forest based on a training set")
@@ -48,11 +50,11 @@ fn get_train_csv() -> String {
 
     let train_path = matches.value_of("train").unwrap();
 
-
     let mut rdr = csv::Reader::from_file(train_path).unwrap();
 
-    unimplemented!()
-
+    rdr.decode()
+       .map(|raw_post| raw_post.unwrap())
+       .collect()
 }
 
 fn convert_is_self(b: bool) -> f64 {
@@ -86,6 +88,17 @@ fn tfidf_reduce_selftext(self_texts: &[&str], words: &[&str]) -> Vec<Vec<f64>> {
     term_frequency_matrix
 }
 
+// Stores the list of words, separated by new line
+// The first line is the length of the list, for preallocation purposes
+fn write_unique_word_list(word_list: &[&str]) {
+    let mut f = File::create("./unique_word_list").unwrap();
+    writeln!(f, "{}", word_list.len());
+    for word in word_list {
+        writeln!(f, "{}", word);
+    }
+    f.flush().unwrap();
+}
+
 fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> Vec<ProcessedPostFeatures> {
 
     let selfs: Vec<_> = raw_posts.iter().map(|r| convert_is_self(r.is_self)).collect();
@@ -96,7 +109,7 @@ fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> Vec<ProcessedPostFe
     let posts: Vec<&str> = raw_posts.iter().map(|r| r.selftext.as_ref()).collect();
 
     let unique_word_list = get_unique_word_list(&posts[..]);
-    // TODO: Write the unique_word_list out to a file
+    write_unique_word_list(&unique_word_list[..]);
     let tfidf_reduction = tfidf_reduce_selftext(&posts[..], &unique_word_list[..]);
 
 

@@ -5,7 +5,7 @@ use serde_json::Value;
 use std::io::prelude::*;
 use stopwatch::Stopwatch;
 
-#[derive(Deserialize, Debug, Clone, RustcEncodable)]
+#[derive(Deserialize, Debug, Clone, RustcEncodable, RustcDecodable)]
 pub struct RawPostFeatures {
     pub is_self: bool,
     pub author: String,
