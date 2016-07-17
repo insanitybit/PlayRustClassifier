@@ -3,7 +3,6 @@
 #![feature(test)]
 
 extern crate clap;
-extern crate ndarray;
 extern crate rayon;
 extern crate rsml;
 extern crate csv;
@@ -11,8 +10,10 @@ extern crate rustc_serialize;
 extern crate playrust_alert;
 extern crate tfidf;
 
-extern crate stopwatch;
-use stopwatch::Stopwatch;
+#[macro_use(stack)]
+extern crate ndarray;
+
+use ndarray::{arr2, Axis, stack};
 
 use tfidf::{TfIdf, TfIdfDefault};
 use clap::{Arg, App};
@@ -40,7 +41,7 @@ pub struct ProcessedPostFeatures {
     /// Whole numbers representing the different subreddits, this is our label
     pub subreddit: f64,
     /// Word frequency vector
-    pub word_freq: Vec<f64>,
+    pub word_freq: Vec<(String, f64)>,
 }
 
 fn get_train_data() -> Vec<RawPostFeatures> {
@@ -82,7 +83,7 @@ fn convert_author_to_popularity(authors: &[&str]) -> Vec<f64> {
 }
 
 // TODO: This should probably return an ndarray
-fn tfidf_reduce_selftext(self_texts: &[&str], words: &[&str]) -> Vec<Vec<f64>> {
+fn tfidf_reduce_selftext(self_texts: &[&str], words: &[&str]) -> Vec<Vec<(String, f64)>> {
     let docs: Vec<_> = {
         let mut docs = Vec::with_capacity(self_texts.len());
         self_texts.par_iter()
@@ -98,25 +99,16 @@ fn tfidf_reduce_selftext(self_texts: &[&str], words: &[&str]) -> Vec<Vec<f64>> {
     let mut term_frequency_matrix = Vec::with_capacity(self_texts.len());
     println!("TFIDF over {:?} words and {} docs", words.len(), docs.len());
 
-    // let mut term_frequency_cache = BTreeMap::new();
-
-    let mut sw = Stopwatch::new();
     for doc in docs.iter() {
-        sw.start();
-        let mut term_frequencies: Vec<_> = Vec::with_capacity(words.len());
+        let mut term_frequencies: Vec<(String, f64)> = Vec::with_capacity(words.len());
         term_frequencies = words.iter()
                                 .map(|word| {
-                                    TfIdfDefault::tfidf(word, doc, all_docs.iter())
-                                    // *term_frequency_cache.entry(word)
-                                    //   .or_insert(TfIdfDefault::tfidf(word, doc, all_docs.iter()))
+                                    ((*word).to_owned(),
+                                     TfIdfDefault::tfidf(word, doc, all_docs.iter()))
                                 })
                                 .collect();
 
         term_frequency_matrix.push(term_frequencies);
-
-        sw.stop();
-        println!("{:?}ms", sw.elapsed_ms());
-        sw.reset();
     }
 
     term_frequency_matrix
@@ -133,54 +125,78 @@ fn write_size_and_list(list: &[&str], filename: &str) {
     f.flush().unwrap();
 }
 
+fn subs_to_float(subs: &[&str]) -> Vec<f64> {
+    let mut sub_float_map = BTreeMap::new();
+    let mut sub_floats = Vec::with_capacity(subs.len());
+    let mut cur_sub = 0f64;
+
+    for sub in subs {
+        let f = *sub_float_map.entry(sub).or_insert({
+            let c = cur_sub;
+            cur_sub += 1f64;
+            c
+        });
+        sub_floats.push(f);
+    }
+    sub_floats
+}
+
 fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> Vec<ProcessedPostFeatures> {
-
     let selfs: Vec<_> = raw_posts.iter().map(|r| convert_is_self(r.is_self)).collect();
-    println!("selfs");
     let downs: Vec<_> = raw_posts.iter().map(|r| r.downs as f64).collect();
-    println!("downs");
     let ups: Vec<_> = raw_posts.iter().map(|r| r.ups as f64).collect();
-    println!("ups");
-    let score: Vec<_> = raw_posts.iter().map(|r| r.score as f64).collect();
-    println!("score");
+    let scores: Vec<_> = raw_posts.iter().map(|r| r.score as f64).collect();
     let mut authors: Vec<&str> = raw_posts.iter().map(|r| r.author.as_ref()).collect();
-    println!("authors");
     let posts: Vec<&str> = raw_posts.iter().map(|r| r.selftext.as_ref()).collect();
-    println!("posts");
-
-    let author_popularity = convert_author_to_popularity(&authors[..]);
-    println!("popularity");
+    let subreddits: Vec<_> = raw_posts.iter().map(|r| r.subreddit.as_ref()).collect();
+    let sub_floats = subs_to_float(&subreddits[..]);
 
     let unique_word_list = get_unique_word_list(&posts[..]);
     let unique_word_list: Vec<_> = unique_word_list.iter().map(|s| s.as_ref()).collect();
-    write_size_and_list(&unique_word_list[..], "./unique_word_list");
     let tfidf_reduction = tfidf_reduce_selftext(&posts[..], &unique_word_list[..]);
+    let author_popularity = convert_author_to_popularity(&authors[..]);
 
-    assert_eq!(selfs.len(), raw_posts.len(), "selfs");
-    assert_eq!(downs.len(), raw_posts.len(), "downs");
-    assert_eq!(ups.len(), raw_posts.len(), "ups");
-    assert_eq!(score.len(), raw_posts.len(), "score");
-    assert_eq!(authors.len(), raw_posts.len(), "authors");
-    assert_eq!(author_popularity.len(),
-               raw_posts.len(),
-               "author_popularity");
-    assert_eq!(posts.len(), raw_posts.len(), "posts");
-    assert_eq!(tfidf_reduction.len(), raw_posts.len(), "tfidf_reduction");
-
-    write_size_and_list(&unique_word_list[..], "./unique_word_list");
     authors.sort();
     authors.dedup();
     write_size_and_list(&authors[..], "./unique_author_list");
+    write_size_and_list(&unique_word_list[..], "./unique_word_list");
 
-    vec![]
+    let mut processed = Vec::with_capacity(tfidf_reduction.len());
+
+    for index in 0..tfidf_reduction.len() {
+        let p = ProcessedPostFeatures {
+            is_self: selfs[index],
+            author_popularity: author_popularity[index],
+            downs: downs[index],
+            ups: ups[index],
+            score: scores[index],
+            subreddit: sub_floats[index],
+            word_freq: tfidf_reduction[index].clone(),
+        };
+        processed.push(p);
+    }
+    processed
 }
 
+fn construct_matrix(post_features: &[ProcessedPostFeatures]) {
+    let selfs: Vec<_> = post_features.iter().map(|p| p.is_self).collect();
+    let auth_pop: Vec<_> = post_features.iter().map(|p| p.author_popularity).collect();
+    let downs: Vec<_> = post_features.iter().map(|p| p.downs).collect();
+    let ups: Vec<_> = post_features.iter().map(|p| p.ups).collect();
+    let score: Vec<_> = post_features.iter().map(|p| p.score).collect();
+    let subreddits: Vec<_> = post_features.iter().map(|p| p.subreddit).collect();
+    // let word_freqs: Vec<_> = post_features.iter().map(|p| p.word_freq).collect();
+
+    let a = stack!(Axis(0), selfs, auth_pop, downs, ups, score, subreddits);
+    println!("{}", a);
+    // ndarray::prelude::arr2::<A: Clone, V: FixedInitializer<Elem = A>>(xs: &[V])
+}
 
 fn main() {
     let posts = get_train_data();
     println!("Get training data");
-    normalize_post_features(&posts[..]);
-
+    let features = normalize_post_features(&posts[..2]);
+    let feat_matrix = construct_matrix(&features[..]);
     // let mut rf = RandomForest::new(10);
 
     // rf.fit(&train, &answers);

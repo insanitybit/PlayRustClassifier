@@ -1,10 +1,12 @@
-extern crate playrust_alert;
 extern crate csv;
 extern crate clap;
+extern crate playrust_alert;
+extern crate tiny_keccak;
 
 use clap::{Arg, App};
 use playrust_alert::reddit::RedditClient;
-use playrust_alert::reddit::get_posts;
+use playrust_alert::reddit::{get_posts, anonymize_author};
+use tiny_keccak::Keccak;
 
 fn get_args() -> String {
     let matches = App::new("Reddit Feature Generator")
@@ -18,6 +20,8 @@ fn get_args() -> String {
 
     matches.value_of("subreddit").unwrap().to_owned()
 }
+
+
 
 fn main() {
     let mut client = RedditClient::new();
@@ -35,7 +39,9 @@ fn main() {
     }
 
     let mut wtr = csv::Writer::from_file(format!("./{}.csv", sub)).unwrap();
+
     let posts = get_posts(raw_posts);
+
     for record in posts.into_iter() {
         let _ = wtr.encode(record);
     }

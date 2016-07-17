@@ -1,6 +1,7 @@
 #![feature(custom_derive, plugin)]
 #![plugin(serde_macros)]
 
+extern crate tiny_keccak;
 extern crate serde;
 extern crate rayon;
 extern crate hyper;

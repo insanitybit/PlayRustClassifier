@@ -4,6 +4,7 @@ use serde_json;
 use serde_json::Value;
 use std::io::prelude::*;
 use stopwatch::Stopwatch;
+use tiny_keccak::Keccak;
 
 #[derive(Deserialize, Debug, Clone, RustcEncodable, RustcDecodable)]
 pub struct RawPostFeatures {
@@ -90,29 +91,32 @@ impl RedditClient {
     }
 }
 
+pub fn anonymize_author(author: &str, iter: u64, key: &[u8]) -> String {
+    let mut sha3 = Keccak::new_sha3_512();
+
+    let mut res: [u8; 512] = [0; 512];
+    let authbytes: Vec<u8> = From::from(author);
+
+    sha3.update(&authbytes);
+    sha3.update(&key);
+    sha3.finalize(&mut res);
+
+    for _ in 0..iter {
+        let mut sha3 = Keccak::new_sha3_512();
+        sha3.update(&res);
+        sha3.update(&key);
+        sha3.finalize(&mut res);
+    }
+    res.iter().take(16).map(|byte| format!("{:02x}", byte)).collect()
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_one() {
-        let mut client = RedditClient::new();
-        let mut posts = Vec::new();
-        let (mut features, mut after) = client.get_raw_features("playrust", 100, &None);
-        posts.extend_from_slice(&features[..]);
-        loop {
-            let res = client.get_raw_features("playrust", 100, &after);
-            features = res.0;
-            after = res.1;
-            println!("{:?}", after);
-            posts.extend_from_slice(&features[..]);
-            if let None = after {
-                break;
-            }
-        }
-        println!("{:?}", posts.len());
-        get_posts(posts);
-
+    fn test_anon() {
+        let anon = anonymize_author("name", 2, &b"key"[..]);
+        println!("{:?}", anon);
     }
 }
