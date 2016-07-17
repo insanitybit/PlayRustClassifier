@@ -9,11 +9,14 @@ extern crate csv;
 extern crate rustc_serialize;
 extern crate playrust_alert;
 extern crate tfidf;
+extern crate stopwatch;
+
+use stopwatch::*;
 
 #[macro_use(stack)]
 extern crate ndarray;
 
-use ndarray::{arr2, Axis, stack};
+use ndarray::{arr2, Axis, stack, ArrayBase};
 
 use tfidf::{TfIdf, TfIdfDefault};
 use clap::{Arg, App};
@@ -41,7 +44,7 @@ pub struct ProcessedPostFeatures {
     /// Whole numbers representing the different subreddits, this is our label
     pub subreddit: f64,
     /// Word frequency vector
-    pub word_freq: Vec<(String, f64)>,
+    pub word_freq: Vec<f64>,
 }
 
 fn get_train_data() -> Vec<RawPostFeatures> {
@@ -83,7 +86,7 @@ fn convert_author_to_popularity(authors: &[&str]) -> Vec<f64> {
 }
 
 // TODO: This should probably return an ndarray
-fn tfidf_reduce_selftext(self_texts: &[&str], words: &[&str]) -> Vec<Vec<(String, f64)>> {
+fn tfidf_reduce_selftext(self_texts: &[&str], words: &[&str]) -> Vec<Vec<f64>> {
     let docs: Vec<_> = {
         let mut docs = Vec::with_capacity(self_texts.len());
         self_texts.par_iter()
@@ -100,14 +103,16 @@ fn tfidf_reduce_selftext(self_texts: &[&str], words: &[&str]) -> Vec<Vec<(String
     println!("TFIDF over {:?} words and {} docs", words.len(), docs.len());
 
     for doc in docs.iter() {
-        let mut term_frequencies: Vec<(String, f64)> = Vec::with_capacity(words.len());
-        term_frequencies = words.iter()
-                                .map(|word| {
-                                    ((*word).to_owned(),
-                                     TfIdfDefault::tfidf(word, doc, all_docs.iter()))
-                                })
-                                .collect();
+        let mut term_frequencies: Vec<f64> = Vec::with_capacity(words.len());
 
+        // let mut sw = stopwatch::Stopwatch::new();
+        // sw.start();
+        words.par_iter()
+             .weight_max()
+             .map(|word| TfIdfDefault::tfidf(word, doc, all_docs.iter()))
+             .collect_into(&mut term_frequencies);
+        // sw.stop();
+        // println!("{:?}", sw.elapsed_ms());
         term_frequency_matrix.push(term_frequencies);
     }
 
@@ -178,27 +183,37 @@ fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> Vec<ProcessedPostFe
     processed
 }
 
-fn construct_matrix(post_features: &[ProcessedPostFeatures]) {
+fn construct_matrix(post_features: &[ProcessedPostFeatures]) -> ArrayBase<Vec<f64>, (usize, usize)> {
     let selfs: Vec<_> = post_features.iter().map(|p| p.is_self).collect();
     let auth_pop: Vec<_> = post_features.iter().map(|p| p.author_popularity).collect();
     let downs: Vec<_> = post_features.iter().map(|p| p.downs).collect();
     let ups: Vec<_> = post_features.iter().map(|p| p.ups).collect();
     let score: Vec<_> = post_features.iter().map(|p| p.score).collect();
-    let subreddits: Vec<_> = post_features.iter().map(|p| p.subreddit).collect();
-    // let word_freqs: Vec<_> = post_features.iter().map(|p| p.word_freq).collect();
 
-    let a = stack!(Axis(0), selfs, auth_pop, downs, ups, score, subreddits);
-    println!("{}", a);
-    // ndarray::prelude::arr2::<A: Clone, V: FixedInitializer<Elem = A>>(xs: &[V])
+    assert_eq!(selfs.len(), post_features.len());
+    assert_eq!(auth_pop.len(), post_features.len());
+    assert_eq!(downs.len(), post_features.len());
+    assert_eq!(ups.len(), post_features.len());
+    assert_eq!(score.len(), post_features.len());
+    let mut a = stack!(Axis(0), selfs, auth_pop, downs, ups, score);
+
+    let term_count = post_features.iter().last().unwrap().word_freq.iter().count();
+    for term_frequency in post_features.iter().map(|p| &p.word_freq[..]) {
+        a = stack!(Axis(0), a, term_frequency);
+    }
+
+    a.into_shape((post_features.len(), term_count + 5)).unwrap()
 }
 
 fn main() {
     let posts = get_train_data();
-    println!("Get training data");
-    let features = normalize_post_features(&posts[..2]);
+    let features = normalize_post_features(&posts[..]);
     let feat_matrix = construct_matrix(&features[..]);
-    // let mut rf = RandomForest::new(10);
+    let ground_truth: Vec<_> = features.iter().map(|p| p.subreddit).collect();
 
-    // rf.fit(&train, &answers);
+    println!("building the random forest");
+    let mut rf = RandomForest::new(10);
+    rf.fit(&feat_matrix, &stack!(Axis(0), ground_truth));
 
+    // println!("{:?}", rf.predict(&feat_matrix));
 }
