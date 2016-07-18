@@ -27,22 +27,26 @@ fn main() {
     let mut client = RedditClient::new();
     let sub = get_args();
 
-    let mut raw_posts = Vec::with_capacity(1000);
+    // let mut raw_posts = Vec::with_capacity(1000);
 
-    let after = None;
+    let mut wtr = csv::Writer::from_file(format!("./{}.csv", sub)).unwrap();
+    let mut after = None;
+
     loop {
-        let (features, after) = client.get_raw_features(&sub, 100, &after);
-        raw_posts.extend_from_slice(&features[..]);
+        println!("fetching");
+        let (features, new_after) = client.get_raw_features(&sub, 100, &after);
+        after = new_after;
+        let posts = get_posts(features);
+        for record in posts.into_iter() {
+            let _ = wtr.encode(record);
+        }
+
         if after.is_none() {
             break;
         }
     }
 
-    let mut wtr = csv::Writer::from_file(format!("./{}.csv", sub)).unwrap();
 
-    let posts = get_posts(raw_posts);
 
-    for record in posts.into_iter() {
-        let _ = wtr.encode(record);
-    }
+
 }
