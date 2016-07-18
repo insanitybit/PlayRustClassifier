@@ -4,6 +4,7 @@
 
 extern crate clap;
 extern crate rayon;
+extern crate rand;
 extern crate rsml;
 extern crate csv;
 extern crate rustc_serialize;
@@ -20,6 +21,7 @@ use ndarray::{arr2, Axis, stack, ArrayBase};
 
 use tfidf::{TfIdf, TfIdfDefault};
 use clap::{Arg, App};
+use rand::{thread_rng, Rng};
 use rayon::prelude::*;
 use rsml::random_forest::model::*;
 use rsml::traits::SupervisedLearning;
@@ -131,18 +133,26 @@ fn write_size_and_list(list: &[&str], filename: &str) {
 }
 
 fn subs_to_float(subs: &[&str]) -> Vec<f64> {
-    let mut sub_float_map = BTreeMap::new();
+    // let mut sub_float_map = BTreeMap::new();
     let mut sub_floats = Vec::with_capacity(subs.len());
     let mut cur_sub = 0f64;
 
     for sub in subs {
-        let f = *sub_float_map.entry(sub).or_insert({
-            let c = cur_sub;
-            cur_sub += 1f64;
-            c
-        });
-        sub_floats.push(f);
+        if *sub == "rust" {
+            sub_floats.push(0f64)
+        } else if *sub == "playrust" {
+            sub_floats.push(1f64)
+        } else {
+            panic!("{}", sub);
+        }
+        // let f = *sub_float_map.entry(sub).or_insert({
+        //     let c = cur_sub;
+        //     cur_sub += 1f64;
+        //     c
+        // });
+        // sub_floats.push(f);
     }
+    println!("{:?}", sub_floats);
     sub_floats
 }
 
@@ -158,7 +168,7 @@ fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> Vec<ProcessedPostFe
 
     let unique_word_list = get_unique_word_list(&posts[..]);
     let unique_word_list: Vec<_> = unique_word_list.iter().map(|s| s.as_ref()).collect();
-    let tfidf_reduction = tfidf_reduce_selftext(&posts[..], &unique_word_list[..]);
+    // let tfidf_reduction = tfidf_reduce_selftext(&posts[..], &unique_word_list[..]);
     let author_popularity = convert_author_to_popularity(&authors[..]);
 
     authors.sort();
@@ -166,9 +176,9 @@ fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> Vec<ProcessedPostFe
     write_size_and_list(&authors[..], "./unique_author_list");
     write_size_and_list(&unique_word_list[..], "./unique_word_list");
 
-    let mut processed = Vec::with_capacity(tfidf_reduction.len());
+    let mut processed = Vec::with_capacity(raw_posts.len());
 
-    for index in 0..tfidf_reduction.len() {
+    for index in 0..raw_posts.len() {
         let p = ProcessedPostFeatures {
             is_self: selfs[index],
             author_popularity: author_popularity[index],
@@ -176,7 +186,7 @@ fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> Vec<ProcessedPostFe
             ups: ups[index],
             score: scores[index],
             subreddit: sub_floats[index],
-            word_freq: tfidf_reduction[index].clone(),
+            word_freq: vec![]//tfidf_reduction[index].clone(),
         };
         processed.push(p);
     }
@@ -184,7 +194,6 @@ fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> Vec<ProcessedPostFe
 }
 
 fn construct_matrix(post_features: &[ProcessedPostFeatures]) -> ArrayBase<Vec<f64>, (usize, usize)> {
-    let selfs: Vec<_> = post_features.iter().map(|p| p.is_self).collect();
     let auth_pop: Vec<_> = post_features.iter().map(|p| p.author_popularity).collect();
     let downs: Vec<_> = post_features.iter().map(|p| p.downs).collect();
     let ups: Vec<_> = post_features.iter().map(|p| p.ups).collect();
@@ -195,25 +204,66 @@ fn construct_matrix(post_features: &[ProcessedPostFeatures]) -> ArrayBase<Vec<f6
     assert_eq!(downs.len(), post_features.len());
     assert_eq!(ups.len(), post_features.len());
     assert_eq!(score.len(), post_features.len());
-    let mut a = stack!(Axis(0), selfs, auth_pop, downs, ups, score);
 
     let term_count = post_features.iter().last().unwrap().word_freq.iter().count();
-    for term_frequency in post_features.iter().map(|p| &p.word_freq[..]) {
-        a = stack!(Axis(0), a, term_frequency);
-    }
+    // let term_frequencies: Vec<_> = post_features.iter().map(|p| &p.word_freq[..]).collect();
 
-    a.into_shape((post_features.len(), term_count + 5)).unwrap()
+    let mut row = vec![auth_pop[0], downs[0], ups[0], score[0]];
+    // row.extend_from_slice(&term_frequencies[0]);
+    let mut a = stack!(Axis(0), row);
+
+    for index in 1..post_features.len() {
+        let mut row = vec![auth_pop[index], downs[index], ups[index], score[index]];
+        // row.extend_from_slice(&term_frequencies[index]);
+        a = stack!(Axis(0), a, row);
+    }
+    a.into_shape((post_features.len(), term_count + 4)).unwrap()
 }
 
 fn main() {
     let posts = get_train_data();
+    let mut posts: Vec<_> = posts.into_iter().filter(|post| post.is_self).collect();
+    let mut rng = thread_rng();
+
+    rng.shuffle(&mut posts);
+
     let features = normalize_post_features(&posts[..]);
     let feat_matrix = construct_matrix(&features[..]);
+    println!("{:#?}", feat_matrix);
     let ground_truth: Vec<_> = features.iter().map(|p| p.subreddit).collect();
+    let ground_truth = &stack!(Axis(0), ground_truth);
+    let (truth1, truth2) = ground_truth.view().split_at(Axis(0), posts.len() / 5);
+    let (sample1, sample2) = feat_matrix.view().split_at(Axis(0), posts.len() / 5);
 
     println!("building the random forest");
     let mut rf = RandomForest::new(10);
-    rf.fit(&feat_matrix, &stack!(Axis(0), ground_truth));
+    rf.fit(&sample2.to_owned(), &truth2.to_owned());
 
-    // println!("{:?}", rf.predict(&feat_matrix));
+    let preds = rf.predict(&sample1.to_owned()).unwrap();
+
+    let mut hits = 0;
+    let mut miss = 0;
+    for (pred, truth) in preds.iter().zip(truth1.iter()) {
+        println!("{:?} {:?}", pred, truth);
+        let pred = pred.round();
+        let truth = truth.round();
+        if pred == truth {
+            hits += 1;
+        } else {
+            miss += 1;
+        }
+    }
+    println!("hit: {}\nmiss: {}", hits, miss);
+    // println!("{:?}", unique_subs);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::subs_to_float;
+
+    #[test]
+    fn test_subs_to_float() {
+        let subs = vec!["a", "b", "c", "c", "b"];
+        assert_eq!(vec![0f64, 1f64, 2f64, 2f64, 1f64], subs_to_float(&subs[..]))
+    }
 }
