@@ -10,5 +10,8 @@ extern crate stopwatch;
 extern crate rustc_serialize;
 extern crate csv;
 extern crate clap;
+extern crate tfidf;
+extern crate rsml;
 
 pub mod reddit;
+pub mod feature_extraction;

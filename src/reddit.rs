@@ -19,6 +19,22 @@ pub struct RawPostFeatures {
     pub title: String,
 }
 
+#[derive(Debug, Clone, RustcEncodable)]
+pub struct ProcessedPostFeatures {
+    /// 0 if self, 1 if not self
+    pub is_self: f64,
+    /// The popularity of the author relative to the dataset
+    pub author_popularity: f64,
+    /// The number of downvotes
+    pub downs: f64,
+    /// The number of upvotes
+    pub ups: f64,
+    /// The overall score of the post
+    pub score: f64,
+    /// Word frequency vector
+    pub word_freq: Vec<f64>,
+}
+
 pub struct RedditClient {
     client: Client,
 }
