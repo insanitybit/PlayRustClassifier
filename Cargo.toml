@@ -6,8 +6,8 @@ version = "0.1.0"
 [dependencies]
 clap = "2.9.2"
 csv = "0.14.*"
+dedup_by = "*"
 hyper = "0.9.*"
-ndarray = "0.6"
 rand = "0.3.*"
 rayon = "0.4.0"
 rustc-serialize = "*"
@@ -20,6 +20,10 @@ tiny-keccak = "1.0.*"
 
 [dependencies.rsml]
 path = "../rsml/"
+
+[dependencies.ndarray]
+features = ["rustc-serialize"]
+ndarray = "0.6"
 
 # The release profile, used for `cargo build --release`.
 [profile.release]

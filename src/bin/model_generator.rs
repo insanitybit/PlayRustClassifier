@@ -3,17 +3,22 @@
 #![feature(test)]
 
 extern crate clap;
+extern crate dedup_by;
 extern crate rayon;
 extern crate rand;
 extern crate rsml;
 extern crate csv;
 extern crate rustc_serialize;
+extern crate serde_json;
 extern crate playrust_alert;
 extern crate tfidf;
 extern crate stopwatch;
 
 use stopwatch::*;
-
+use dedup_by::dedup_by;
+use std::mem;
+use std::cmp::Ordering;
+use rustc_serialize::json;
 #[macro_use(stack)]
 extern crate ndarray;
 
@@ -31,7 +36,7 @@ use std::fs::File;
 use std::io::prelude::*;
 use playrust_alert::reddit::RawPostFeatures;
 
-#[derive(Deserialize, Debug, Clone, RustcEncodable)]
+#[derive(Debug, Clone, RustcEncodable)]
 pub struct ProcessedPostFeatures {
     /// 0 if self, 1 if not self
     pub is_self: f64,
@@ -88,7 +93,9 @@ fn convert_author_to_popularity(authors: &[&str]) -> Vec<f64> {
 }
 
 // TODO: This should probably return an ndarray
-fn tfidf_reduce_selftext(self_texts: &[&str], words: &[&str]) -> Vec<Vec<f64>> {
+fn tfidf_reduce_selftext(self_texts: &[&str],
+                         words: &[&str])
+                         -> (Vec<Vec<f64>>, Vec<Vec<(String, usize)>>) {
     let docs: Vec<_> = {
         let mut docs = Vec::with_capacity(self_texts.len());
         self_texts.par_iter()
@@ -96,6 +103,7 @@ fn tfidf_reduce_selftext(self_texts: &[&str], words: &[&str]) -> Vec<Vec<f64>> {
                   .collect_into(&mut docs);
         docs
     };
+    let owned_docs = docs.clone();
     let docs: Vec<Vec<_>> = docs.iter()
                                 .map(|doc| doc.iter().map(|t| (t.0.as_str(), t.1)).collect())
                                 .collect();
@@ -118,14 +126,13 @@ fn tfidf_reduce_selftext(self_texts: &[&str], words: &[&str]) -> Vec<Vec<f64>> {
         term_frequency_matrix.push(term_frequencies);
     }
 
-    term_frequency_matrix
+    (term_frequency_matrix, owned_docs)
 }
 
 // Stores the list of words, separated by new line
 // The first line is the length of the list, for preallocation purposes
 fn write_size_and_list(list: &[&str], filename: &str) {
     let mut f = File::create(filename).unwrap();
-    writeln!(f, "{}", list.len());
     for item in list {
         writeln!(f, "{}", item);
     }
@@ -168,13 +175,13 @@ fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> Vec<ProcessedPostFe
 
     let unique_word_list = get_unique_word_list(&posts[..]);
     let unique_word_list: Vec<_> = unique_word_list.iter().map(|s| s.as_ref()).collect();
-    // let tfidf_reduction = tfidf_reduce_selftext(&posts[..], &unique_word_list[..]);
+    let (tfidf_reduction, all_docs) = tfidf_reduce_selftext(&posts[..], &unique_word_list[..]);
     let author_popularity = convert_author_to_popularity(&authors[..]);
 
     authors.sort();
-    authors.dedup();
-    write_size_and_list(&authors[..], "./unique_author_list");
+    write_size_and_list(&authors[..], "./total_author_list");
     write_size_and_list(&unique_word_list[..], "./unique_word_list");
+    save_all_docs(&all_docs[..]);
 
     let mut processed = Vec::with_capacity(raw_posts.len());
 
@@ -186,7 +193,7 @@ fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> Vec<ProcessedPostFe
             ups: ups[index],
             score: scores[index],
             subreddit: sub_floats[index],
-            word_freq: vec![]//tfidf_reduction[index].clone(),
+            word_freq: tfidf_reduction[index].clone(),
         };
         processed.push(p);
     }
@@ -199,58 +206,112 @@ fn construct_matrix(post_features: &[ProcessedPostFeatures]) -> ArrayBase<Vec<f6
     let ups: Vec<_> = post_features.iter().map(|p| p.ups).collect();
     let score: Vec<_> = post_features.iter().map(|p| p.score).collect();
 
-    assert_eq!(selfs.len(), post_features.len());
     assert_eq!(auth_pop.len(), post_features.len());
     assert_eq!(downs.len(), post_features.len());
     assert_eq!(ups.len(), post_features.len());
     assert_eq!(score.len(), post_features.len());
 
     let term_count = post_features.iter().last().unwrap().word_freq.iter().count();
-    // let term_frequencies: Vec<_> = post_features.iter().map(|p| &p.word_freq[..]).collect();
+    let term_frequencies: Vec<_> = post_features.iter().map(|p| &p.word_freq[..]).collect();
 
     let mut row = vec![auth_pop[0], downs[0], ups[0], score[0]];
-    // row.extend_from_slice(&term_frequencies[0]);
+    row.extend_from_slice(&term_frequencies[0]);
     let mut a = stack!(Axis(0), row);
 
     for index in 1..post_features.len() {
         let mut row = vec![auth_pop[index], downs[index], ups[index], score[index]];
-        // row.extend_from_slice(&term_frequencies[index]);
+        row.extend_from_slice(&term_frequencies[index]);
         a = stack!(Axis(0), a, row);
     }
     a.into_shape((post_features.len(), term_count + 4)).unwrap()
 }
 
+fn write_features(nd: ndarray::ArrayBase<ndarray::ViewRepr<&f64>, (usize, usize)>, path: &str) {
+    let mut wtr = csv::Writer::from_file(format!("./{}.csv", path)).unwrap();
+    // wtr.encode(nd);
+    for record in nd.inner_iter() {
+        let _ = wtr.encode(record);
+    }
+}
+
+fn write_truth(nd: ndarray::ArrayBase<ndarray::ViewRepr<&f64>, usize>, path: &str) {
+    let mut wtr = csv::Writer::from_file(format!("./{}.csv", path)).unwrap();
+    // wtr.encode(nd);
+    for record in nd.inner_iter() {
+        let _ = wtr.encode(record);
+    }
+}
+
+fn save_all_docs(docs: &[Vec<(String, usize)>]) {
+    let serialized = json::encode(&docs).unwrap();
+
+    let mut f = File::create("all_docs").unwrap();
+    write!(f, "{}", serialized);
+    f.flush().unwrap();
+}
+
+fn save_rf(rf: &RandomForest) {
+    let serialized = json::encode(&rf).unwrap();
+
+    let mut f = File::create("clf").unwrap();
+    write!(f, "{}", serialized);
+    f.flush().unwrap();
+}
+
 fn main() {
     let posts = get_train_data();
+    println!("{:?}", posts.len());
     let mut posts: Vec<_> = posts.into_iter().filter(|post| post.is_self).collect();
+    let init_s = posts.len();
+    posts.sort_by(|a, b| a.title.cmp(&b.title));
+    dedup_by(&mut posts, |a, b| a.title == b.title);
+    println!("{}, {:?}", init_s, posts.len());
     let mut rng = thread_rng();
 
     rng.shuffle(&mut posts);
 
     let features = normalize_post_features(&posts[..]);
     let feat_matrix = construct_matrix(&features[..]);
-    println!("{:#?}", feat_matrix);
     let ground_truth: Vec<_> = features.iter().map(|p| p.subreddit).collect();
     let ground_truth = &stack!(Axis(0), ground_truth);
-    let (truth1, truth2) = ground_truth.view().split_at(Axis(0), posts.len() / 5);
-    let (sample1, sample2) = feat_matrix.view().split_at(Axis(0), posts.len() / 5);
+    let (truth1, truth2) = ground_truth.view().split_at(Axis(0), posts.len() / 6);
+    let (sample1, sample2) = feat_matrix.view().split_at(Axis(0), posts.len() / 6);
 
+    write_truth(truth1, "truth1");
+    write_truth(truth2, "truth2");
+    write_features(sample1, "sample1");
+    write_features(sample2, "sample2");
+
+    let (pred_raw, _) = posts.split_at(posts.len() / 6);
+    println!("{:?} {:?}", truth1.shape(), truth2.shape());
     println!("building the random forest");
-    let mut rf = RandomForest::new(10);
+
+    let mut rf = RandomForest::new(20);
     rf.fit(&sample2.to_owned(), &truth2.to_owned());
+
+    save_rf(&rf);
 
     let preds = rf.predict(&sample1.to_owned()).unwrap();
 
     let mut hits = 0;
     let mut miss = 0;
-    for (pred, truth) in preds.iter().zip(truth1.iter()) {
-        println!("{:?} {:?}", pred, truth);
-        let pred = pred.round();
+    for (index, (pred, truth)) in preds.iter().zip(truth1.iter()).enumerate() {
+        let normal_pred = {
+            if *pred > 0.6 {
+                1f64
+            } else {
+                0f64
+            }
+        };
+
         let truth = truth.round();
-        if pred == truth {
+        println!("{:?} {:?} {:?}", pred, normal_pred, truth);
+
+        if normal_pred == truth {
             hits += 1;
         } else {
             miss += 1;
+            // println!("{:?}", pred_raw[index]);
         }
     }
     println!("hit: {}\nmiss: {}", hits, miss);
@@ -259,11 +320,11 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::subs_to_float;
+    use super::{subs_to_float, dedup_by};
 
-    #[test]
-    fn test_subs_to_float() {
-        let subs = vec!["a", "b", "c", "c", "b"];
-        assert_eq!(vec![0f64, 1f64, 2f64, 2f64, 1f64], subs_to_float(&subs[..]))
-    }
+    // #[test]
+    // fn test_subs_to_float() {
+    //     let subs = vec!["a", "b", "c", "c", "b"];
+    //     assert_eq!(vec![0f64, 1f64, 2f64, 2f64, 1f64], subs_to_float(&subs[..]))
+    // }
 }
