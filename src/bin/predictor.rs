@@ -11,7 +11,7 @@ extern crate playrust_alert;
 extern crate rsml;
 
 use clap::{Arg, App};
-use ndarray::{arr2, Axis, stack, ArrayBase};
+use ndarray::{Axis, ArrayBase};
 
 use playrust_alert::reddit::{RawPostFeatures, ProcessedPostFeatures};
 use playrust_alert::feature_extraction::{convert_author_to_popularity, convert_is_self,
@@ -33,15 +33,8 @@ fn load_model() -> RandomForest {
     json::decode(&json_str).unwrap()
 }
 
-fn load_unique_word_list() -> Vec<String> {
-    let mut f = File::open("unique_word_list").unwrap();
-    let mut unpslit_str = String::new();
-    let _ = f.read_to_string(&mut unpslit_str).unwrap();
-    unpslit_str.lines().map(String::from).collect()
-}
-
-fn load_authors() -> Vec<String> {
-    let mut f = File::open("total_author_list").unwrap();
+fn load_list(path: &str) -> Vec<String> {
+    let mut f = File::open(path).unwrap();
     let mut unpslit_str = String::new();
     let _ = f.read_to_string(&mut unpslit_str).unwrap();
     unpslit_str.lines().map(String::from).collect()
@@ -55,7 +48,6 @@ fn load_all_docs() -> Vec<Vec<(String, usize)>> {
     json::decode(&json_str).unwrap()
 }
 
-
 fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> (Vec<ProcessedPostFeatures>, Vec<f64>) {
     let selfs: Vec<_> = raw_posts.iter().map(|r| convert_is_self(r.is_self)).collect();
     let downs: Vec<_> = raw_posts.iter().map(|r| r.downs as f64).collect();
@@ -64,11 +56,11 @@ fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> (Vec<ProcessedPostF
     let subreddits: Vec<_> = raw_posts.iter().map(|r| r.subreddit.as_ref()).collect();
     let sub_floats = subs_to_float(&subreddits[..]);
     let mut authors: Vec<String> = raw_posts.into_iter().map(|r| r.author.to_owned()).collect();
-    authors.extend_from_slice(&load_authors()[..]);
+    authors.extend_from_slice(&load_list("./data/total_author_list")[..]);
     let authors: Vec<_> = authors.iter().map(|a| a.as_ref()).collect();
     let posts: Vec<&str> = raw_posts.iter().map(|r| r.selftext.as_ref()).collect();
 
-    let unique_word_list = load_unique_word_list();
+    let unique_word_list = load_list("./data/unique_word_list");
     let unique_word_list: Vec<_> = unique_word_list.iter().map(|s| s.as_ref()).collect();
 
     let all_docs = load_all_docs();
@@ -106,15 +98,15 @@ fn construct_matrix(post_features: &[ProcessedPostFeatures]) -> ArrayBase<Vec<f6
     let term_frequencies: Vec<_> = post_features.iter().map(|p| &p.word_freq[..]).collect();
 
     let mut row = vec![auth_pop[0], downs[0], ups[0], score[0]];
-    row.extend_from_slice(&term_frequencies[0]);
+    row.extend_from_slice(term_frequencies[0]);
     let mut a = stack!(Axis(0), row);
 
     for index in 1..post_features.len() {
         let mut row = vec![auth_pop[index], downs[index], ups[index], score[index]];
-        row.extend_from_slice(&term_frequencies[index]);
+        row.extend_from_slice(term_frequencies[index]);
         a = stack!(Axis(0), a, row);
     }
-    a.into_shape((post_features.len(), term_count + 4)).unwrap()
+    a.into_shape((post_features.len(), term_count + 4)).expect("Could not reshape a")
 }
 
 fn get_pred_data() -> Vec<RawPostFeatures> {
@@ -138,11 +130,12 @@ fn get_pred_data() -> Vec<RawPostFeatures> {
 
 fn main() {
     let raw_posts = get_pred_data();
-    let (features, ground_truth) = normalize_post_features(&raw_posts[..]);
+    let raw_posts: Vec<_> = raw_posts.into_iter().filter(|p| p.subreddit == "playrust").collect();
+    let (features, _) = normalize_post_features(&raw_posts[..2]);
     let feat_matrix = construct_matrix(&features[..]);
 
-    let mut rf = load_model();
+    let rf = load_model();
 
-    rf.predict(&feat_matrix);
+    println!("{:?}", rf.predict(&feat_matrix).unwrap());
 
 }

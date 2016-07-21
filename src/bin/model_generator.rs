@@ -2,38 +2,37 @@
 #![plugin(serde_macros)]
 #![feature(test)]
 
-extern crate clap;
-extern crate dedup_by;
-extern crate rayon;
-extern crate rand;
-extern crate rsml;
-extern crate csv;
-extern crate rustc_serialize;
-extern crate serde_json;
-extern crate playrust_alert;
-extern crate tfidf;
-extern crate stopwatch;
-
-use stopwatch::*;
-use dedup_by::dedup_by;
-use std::mem;
-use std::cmp::Ordering;
-use rustc_serialize::json;
 #[macro_use(stack)]
 extern crate ndarray;
 
-use ndarray::{arr2, Axis, stack, ArrayBase};
+extern crate clap;
+extern crate csv;
+extern crate dedup_by;
+extern crate playrust_alert;
+extern crate rand;
+extern crate rayon;
+extern crate rsml;
+extern crate rustc_serialize;
+extern crate serde_json;
+extern crate stopwatch;
+extern crate tfidf;
 
 use clap::{Arg, App};
+use dedup_by::dedup_by;
+use rustc_serialize::json;
+use ndarray::{Axis, ArrayBase, Dimension};
+use playrust_alert::reddit::{RawPostFeatures, ProcessedPostFeatures};
+use playrust_alert::feature_extraction::{convert_author_to_popularity, convert_is_self,
+                                         tfidf_reduce_selftext, subs_to_float, text_to_docs};
 use rand::{thread_rng, Rng};
-use rayon::prelude::*;
 use rsml::random_forest::model::*;
 use rsml::traits::SupervisedLearning;
-use std::collections::BTreeMap;
+use rsml::tfidf_helper::get_unique_word_list;
+use rustc_serialize::Encodable;
 use std::fs::File;
 use std::io::prelude::*;
-use playrust_alert::reddit::{RawPostFeatures, ProcessedPostFeatures};
-use feature_extraction::*;
+
+
 
 fn get_train_data() -> Vec<RawPostFeatures> {
     let matches = App::new("Model Generator")
@@ -49,9 +48,12 @@ fn get_train_data() -> Vec<RawPostFeatures> {
 
     let mut rdr = csv::Reader::from_file(train_path).unwrap();
 
-    rdr.decode()
-       .map(|raw_post| raw_post.unwrap())
-       .collect()
+    let mut posts: Vec<RawPostFeatures> = rdr.decode()
+                                             .map(|raw_post| raw_post.unwrap())
+                                             .collect();
+    posts.sort_by(|a, b| a.title.cmp(&b.title));
+    dedup_by(&mut posts, |a, b| a.title == b.title);
+    posts
 }
 
 // Stores the list of words, separated by new line
@@ -59,9 +61,9 @@ fn get_train_data() -> Vec<RawPostFeatures> {
 fn write_size_and_list(list: &[&str], filename: &str) {
     let mut f = File::create(filename).unwrap();
     for item in list {
-        writeln!(f, "{}", item);
+        writeln!(f, "{}", item).unwrap();
     }
-    f.flush().unwrap();
+    let _ = f.flush();
 }
 
 fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> (Vec<ProcessedPostFeatures>, Vec<f64>) {
@@ -81,9 +83,9 @@ fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> (Vec<ProcessedPostF
     let author_popularity = convert_author_to_popularity(&authors[..]);
 
     authors.sort();
-    write_size_and_list(&authors[..], "./total_author_list");
-    write_size_and_list(&unique_word_list[..], "./unique_word_list");
-    save_all_docs(&all_docs[..]);
+    write_size_and_list(&authors[..], "./data/total_author_list");
+    write_size_and_list(&unique_word_list[..], "./data/unique_word_list");
+    serialize_to_file(&all_docs, "./data/all_docs");
 
     let mut processed = Vec::with_capacity(raw_posts.len());
 
@@ -117,87 +119,69 @@ fn construct_matrix(post_features: &[ProcessedPostFeatures]) -> ArrayBase<Vec<f6
     let term_frequencies: Vec<_> = post_features.iter().map(|p| &p.word_freq[..]).collect();
 
     let mut row = vec![auth_pop[0], downs[0], ups[0], score[0]];
-    row.extend_from_slice(&term_frequencies[0]);
+    row.extend_from_slice(term_frequencies[0]);
     let mut a = stack!(Axis(0), row);
 
     for index in 1..post_features.len() {
         let mut row = vec![auth_pop[index], downs[index], ups[index], score[index]];
-        row.extend_from_slice(&term_frequencies[index]);
+        row.extend_from_slice(term_frequencies[index]);
         a = stack!(Axis(0), a, row);
     }
     a.into_shape((post_features.len(), term_count + 4)).unwrap()
 }
 
-fn write_features(nd: ndarray::ArrayBase<ndarray::ViewRepr<&f64>, (usize, usize)>, path: &str) {
-    let mut wtr = csv::Writer::from_file(format!("./{}.csv", path)).unwrap();
+fn write_ndarray<T: Dimension>(nd: ndarray::ArrayBase<ndarray::ViewRepr<&f64>, T>, path: &str) {
+    let mut wtr = csv::Writer::from_file(format!("./data/{}.csv", path)).unwrap();
     // wtr.encode(nd);
     for record in nd.inner_iter() {
         let _ = wtr.encode(record);
     }
 }
 
-fn write_truth(nd: ndarray::ArrayBase<ndarray::ViewRepr<&f64>, usize>, path: &str) {
-    let mut wtr = csv::Writer::from_file(format!("./{}.csv", path)).unwrap();
-    // wtr.encode(nd);
-    for record in nd.inner_iter() {
-        let _ = wtr.encode(record);
-    }
-}
+fn serialize_to_file<T>(s: &T, path: &str)
+    where T: Encodable
+{
+    let serialized = json::encode(&s).unwrap();
 
-fn save_all_docs(docs: &[Vec<(String, usize)>]) {
-    let serialized = json::encode(&docs).unwrap();
-
-    let mut f = File::create("all_docs").unwrap();
-    write!(f, "{}", serialized);
-    f.flush().unwrap();
-}
-
-fn save_rf(rf: &RandomForest) {
-    let serialized = json::encode(&rf).unwrap();
-
-    let mut f = File::create("clf").unwrap();
-    write!(f, "{}", serialized);
+    let mut f = File::create(path).unwrap();
+    write!(f, "{}", serialized).unwrap();
     f.flush().unwrap();
 }
 
 fn main() {
-    let posts = get_train_data();
-    println!("{:?}", posts.len());
-    let mut posts: Vec<_> = posts.into_iter().filter(|post| post.is_self).collect();
-    let init_s = posts.len();
-    posts.sort_by(|a, b| a.title.cmp(&b.title));
-    dedup_by(&mut posts, |a, b| a.title == b.title);
-    println!("{}, {:?}", init_s, posts.len());
-    let mut rng = thread_rng();
+    // Deserialize raw reddit post features from an input file, deduplicate by the title, and
+    // then shuffle them.
+    let posts = {
+        let mut posts = get_train_data();
+        let mut rng = thread_rng();
+        rng.shuffle(&mut posts);
+        posts
+    };
 
-    rng.shuffle(&mut posts);
+    // Generate our processed feature matrix
+    let (features, ground_truth) = normalize_post_features(&posts[..]);
+    let feat_matrix = construct_matrix(&features[..]);
 
-    let features = normalize_post_features(&posts[..]);
-    let (feat_matrix, ground_truth) = construct_matrix(&features[..]);
-
+    // Split our data such that we train on one set and can test our accuracy on another
     let ground_truth = &stack!(Axis(0), ground_truth);
-    let (truth1, truth2) = ground_truth.view().split_at(Axis(0), posts.len() / 6);
-    let (sample1, sample2) = feat_matrix.view().split_at(Axis(0), posts.len() / 6);
+    let (truth1, truth2) = ground_truth.view().split_at(Axis(0), posts.len() / 9);
+    let (sample1, sample2) = feat_matrix.view().split_at(Axis(0), posts.len() / 9);
 
-    write_truth(truth1, "truth1");
-    write_truth(truth2, "truth2");
-    write_features(sample1, "sample1");
-    write_features(sample2, "sample2");
+    write_ndarray(truth1, "truth1");
+    write_ndarray(truth2, "truth2");
+    write_ndarray(sample1, "sample1");
+    write_ndarray(sample2, "sample2");
 
-    let (pred_raw, _) = posts.split_at(posts.len() / 6);
-    println!("{:?} {:?}", truth1.shape(), truth2.shape());
-    println!("building the random forest");
-
-    let mut rf = RandomForest::new(20);
+    let mut rf = RandomForest::new(200);
     rf.fit(&sample2.to_owned(), &truth2.to_owned());
 
-    save_rf(&rf);
+    serialize_to_file(&rf, "./models/rf");
 
     let preds = rf.predict(&sample1.to_owned()).unwrap();
 
     let mut hits = 0;
     let mut miss = 0;
-    for (index, (pred, truth)) in preds.iter().zip(truth1.iter()).enumerate() {
+    for (pred, truth) in preds.iter().zip(truth1.iter()) {
         let normal_pred = {
             if *pred > 0.6 {
                 1f64

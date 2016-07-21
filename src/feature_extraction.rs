@@ -1,7 +1,7 @@
 use rayon::prelude::*;
 use rsml::tfidf_helper::*;
 use tfidf::{TfIdf, TfIdfDefault};
-
+use stopwatch::Stopwatch;
 use std::collections::BTreeMap;
 
 pub fn convert_is_self(b: bool) -> f64 {
@@ -48,14 +48,14 @@ pub fn tfidf_reduce_selftext(self_texts: &[&str],
     for doc in docs.iter() {
         let mut term_frequencies: Vec<f64> = Vec::with_capacity(words.len());
 
-        // let mut sw = stopwatch::Stopwatch::new();
-        // sw.start();
+        let mut sw = Stopwatch::new();
+        sw.start();
         words.par_iter()
              .weight_max()
              .map(|word| TfIdfDefault::tfidf(word, doc, all_docs.iter()))
              .collect_into(&mut term_frequencies);
-        // sw.stop();
-        // println!("{:?}", sw.elapsed_ms());
+        sw.stop();
+        println!("{:?}", sw.elapsed_ms());
         term_frequency_matrix.push(term_frequencies);
     }
 
@@ -66,7 +66,7 @@ pub fn tfidf_reduce_selftext(self_texts: &[&str],
 pub fn subs_to_float(subs: &[&str]) -> Vec<f64> {
     // let mut sub_float_map = BTreeMap::new();
     let mut sub_floats = Vec::with_capacity(subs.len());
-    let mut cur_sub = 0f64;
+    // let mut cur_sub = 0f64;
 
     for sub in subs {
         if *sub == "rust" {
