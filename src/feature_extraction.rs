@@ -45,17 +45,17 @@ pub fn tfidf_reduce_selftext(self_texts: &[&str],
     let mut term_frequency_matrix = Vec::with_capacity(self_texts.len());
     println!("TFIDF over {:?} words and {} docs", words.len(), docs.len());
 
-    for doc in docs.iter() {
+    for doc in docs {
         let mut term_frequencies: Vec<f64> = Vec::with_capacity(words.len());
 
-        let mut sw = Stopwatch::new();
-        sw.start();
+        // let mut sw = Stopwatch::new();
+        // sw.start();
         words.par_iter()
              .weight_max()
-             .map(|word| TfIdfDefault::tfidf(word, doc, all_docs.iter()))
+             .map(|word| TfIdfDefault::tfidf(word, &doc, all_docs.iter()))
              .collect_into(&mut term_frequencies);
-        sw.stop();
-        println!("{:?}", sw.elapsed_ms());
+        // sw.stop();
+        // println!("{:?}", sw.elapsed_ms());
         term_frequency_matrix.push(term_frequencies);
     }
 
@@ -83,6 +83,6 @@ pub fn subs_to_float(subs: &[&str]) -> Vec<f64> {
         // });
         // sub_floats.push(f);
     }
-    println!("{:?}", sub_floats);
+    // println!("{:?}", sub_floats);
     sub_floats
 }

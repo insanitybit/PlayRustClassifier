@@ -61,19 +61,44 @@ impl RedditClient {
         RedditClient { client: Client::new() }
     }
 
+
+    pub fn get_raw_features_from_url(&mut self, url: &str) -> Vec<serde_json::Value> {
+        let query = format!("{}.json", url);
+
+        let mut res = self.client.get(&query).send().unwrap();
+
+        let body = {
+            let mut s = String::new();
+            let _ = res.read_to_string(&mut s);
+            s
+        };
+
+        let data: Value = serde_json::from_str(&body).unwrap();
+        let data = data.as_array().expect("Expected array");
+        let data = data[0].as_object().expect("Data1 should have been an object");
+        let data = data.get("data").expect("Expected key data");
+        let data = data.as_object().expect("Data2 should have been an object");
+
+
+        let data = data.get("children").expect("Expected children data");
+        let data = data.as_array().unwrap();
+        data.clone()
+    }
+
+
     pub fn get_raw_features(&mut self,
                             sub: &str,
                             limit: u32,
                             after: &Option<String>)
                             -> (Vec<serde_json::Value>, Option<String>) {
-        let query = match after {
-            &Some(ref a) => {
+        let query = match *after {
+            Some(ref a) => {
                 format!("https://www.reddit.com/r/{}/new.json?sort=new&limit={}&after={}",
                         sub,
                         limit,
                         a)
             }
-            &None => {
+            None => {
                 format!("https://www.reddit.com/r/{}/new.json?sort=new&limit={}",
                         sub,
                         limit)

@@ -4,15 +4,16 @@ extern crate ndarray;
 
 extern crate clap;
 extern crate csv;
-
 extern crate rustc_serialize;
+// extern crate pencil;
 extern crate playrust_alert;
 
 extern crate rsml;
 
 use clap::{Arg, App};
 use ndarray::{Axis, ArrayBase};
-
+use playrust_alert::reddit;
+// use pencil::{Pencil, Request, Response, PencilResult};
 use playrust_alert::reddit::{RawPostFeatures, ProcessedPostFeatures};
 use playrust_alert::feature_extraction::{convert_author_to_popularity, convert_is_self,
                                          tfidf_reduce_selftext, subs_to_float};
@@ -26,7 +27,7 @@ use std::fs::File;
 use std::io::prelude::*;
 
 fn load_model() -> RandomForest {
-    let mut f = File::open("clf").unwrap();
+    let mut f = File::open("./models/clf").unwrap();
     let mut json_str = String::new();
 
     let _ = f.read_to_string(&mut json_str).unwrap();
@@ -41,7 +42,7 @@ fn load_list(path: &str) -> Vec<String> {
 }
 
 fn load_all_docs() -> Vec<Vec<(String, usize)>> {
-    let mut f = File::open("all_docs").unwrap();
+    let mut f = File::open("./data/all_docs").unwrap();
     let mut json_str = String::new();
 
     let _ = f.read_to_string(&mut json_str).unwrap();
@@ -128,10 +129,33 @@ fn get_pred_data() -> Vec<RawPostFeatures> {
        .collect()
 }
 
+// fn predict(r: &mut Request) -> PencilResult {
+//     let url = r.get_json().unwrap().as_string();
+//     let reddit_client = reddit::RedditClient::new();
+//     let raw_features = vec![reddit_client.get_raw_features_from_url(&url)];
+//
+//     let raw_posts: Vec<_> = raw_posts.into_iter().filter(|p| p.subreddit == "playrust").collect();
+//     let (features, _) = normalize_post_features(&raw_posts[..2]);
+//     let feat_matrix = construct_matrix(&features[..]);
+//
+//     let rf = load_model();
+//     let pred = rf.predict(&feat_matrix).unwrap();
+//     let sub = if pred.round() == 0 {
+//         "playrust"
+//     } else {
+//         "rust"
+//     };
+//
+//     Ok(Response::from(&sub))
+// }
+
 fn main() {
-    let raw_posts = get_pred_data();
-    let raw_posts: Vec<_> = raw_posts.into_iter().filter(|p| p.subreddit == "playrust").collect();
-    let (features, _) = normalize_post_features(&raw_posts[..2]);
+
+    let mut reddit_client = reddit::RedditClient::new();
+    let raw = reddit_client.get_raw_features_from_url("https://www.reddit.com/r/rust/comments/4tz6e5/are_aliased_mutable_raw_pointers_ub");
+    let raw_posts = reddit::get_posts(raw);
+
+    let (features, _) = normalize_post_features(&raw_posts[..]);
     let feat_matrix = construct_matrix(&features[..]);
 
     let rf = load_model();

@@ -20,7 +20,7 @@ extern crate tfidf;
 use clap::{Arg, App};
 use dedup_by::dedup_by;
 use rustc_serialize::json;
-use ndarray::{Axis, ArrayBase, Dimension};
+use ndarray::{Axis, ArrayBase, Dimension, Array};
 use playrust_alert::reddit::{RawPostFeatures, ProcessedPostFeatures};
 use playrust_alert::feature_extraction::{convert_author_to_popularity, convert_is_self,
                                          tfidf_reduce_selftext, subs_to_float, text_to_docs};
@@ -151,11 +151,11 @@ fn serialize_to_file<T>(s: &T, path: &str)
 fn main() {
     // Deserialize raw reddit post features from an input file, deduplicate by the title, and
     // then shuffle them.
-    let posts = {
+    let posts: Vec<_> = {
         let mut posts = get_train_data();
         let mut rng = thread_rng();
         rng.shuffle(&mut posts);
-        posts
+        posts.into_iter().take(500).collect()
     };
 
     // Generate our processed feature matrix
@@ -163,19 +163,19 @@ fn main() {
     let feat_matrix = construct_matrix(&features[..]);
 
     // Split our data such that we train on one set and can test our accuracy on another
-    let ground_truth = &stack!(Axis(0), ground_truth);
-    let (truth1, truth2) = ground_truth.view().split_at(Axis(0), posts.len() / 9);
-    let (sample1, sample2) = feat_matrix.view().split_at(Axis(0), posts.len() / 9);
+    let ground_truth = Array::from_vec(ground_truth);
 
-    write_ndarray(truth1, "truth1");
-    write_ndarray(truth2, "truth2");
-    write_ndarray(sample1, "sample1");
-    write_ndarray(sample2, "sample2");
+    let (truth1, truth2) = ground_truth.view().split_at(Axis(0), posts.len() / 8);
+    let (sample1, sample2) = feat_matrix.view().split_at(Axis(0), posts.len() / 8);
+    // write_ndarray(truth1, "truth1");
+    // write_ndarray(truth2, "truth2");
+    // write_ndarray(sample1, "sample1");
+    // write_ndarray(sample2, "sample2");
 
-    let mut rf = RandomForest::new(200);
+    let mut rf = RandomForest::new(1);
     rf.fit(&sample2.to_owned(), &truth2.to_owned());
 
-    serialize_to_file(&rf, "./models/rf");
+    // serialize_to_file(&rf, "./models/rf");
 
     let preds = rf.predict(&sample1.to_owned()).unwrap();
 
@@ -191,7 +191,7 @@ fn main() {
         };
 
         let truth = truth.round();
-        println!("{:?} {:?} {:?}", pred, normal_pred, truth);
+        // println!("{:?} {:?} {:?}", pred, normal_pred, truth);
 
         if normal_pred == truth {
             hits += 1;
