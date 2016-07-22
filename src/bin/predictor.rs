@@ -21,13 +21,13 @@ use playrust_alert::feature_extraction::{convert_author_to_popularity, convert_i
 use rsml::random_forest::RandomForest;
 use rsml::traits::SupervisedLearning;
 
-use rustc_serialize::json;
+use rustc_serialize::{json, Decodable};
 
 use std::fs::File;
 use std::io::prelude::*;
 
-fn load_model() -> RandomForest {
-    let mut f = File::open("./models/clf").unwrap();
+fn load_json<T: Decodable>(path: &str) -> T {
+    let mut f = File::open(path).unwrap();
     let mut json_str = String::new();
 
     let _ = f.read_to_string(&mut json_str).unwrap();
@@ -39,14 +39,6 @@ fn load_list(path: &str) -> Vec<String> {
     let mut unpslit_str = String::new();
     let _ = f.read_to_string(&mut unpslit_str).unwrap();
     unpslit_str.lines().map(String::from).collect()
-}
-
-fn load_all_docs() -> Vec<Vec<(String, usize)>> {
-    let mut f = File::open("./data/all_docs").unwrap();
-    let mut json_str = String::new();
-
-    let _ = f.read_to_string(&mut json_str).unwrap();
-    json::decode(&json_str).unwrap()
 }
 
 fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> (Vec<ProcessedPostFeatures>, Vec<f64>) {
@@ -64,7 +56,7 @@ fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> (Vec<ProcessedPostF
     let unique_word_list = load_list("./data/unique_word_list");
     let unique_word_list: Vec<_> = unique_word_list.iter().map(|s| s.as_ref()).collect();
 
-    let all_docs = load_all_docs();
+    let all_docs: Vec<Vec<(String, usize)>> = load_json("./data/all_docs");
     let tfidf_reduction = tfidf_reduce_selftext(&posts[..], &unique_word_list[..], &all_docs[..]);
 
     let author_popularity = convert_author_to_popularity(&authors[..]);
@@ -150,7 +142,6 @@ fn get_pred_data() -> Vec<RawPostFeatures> {
 // }
 
 fn main() {
-
     let mut reddit_client = reddit::RedditClient::new();
     let raw = reddit_client.get_raw_features_from_url("https://www.reddit.com/r/rust/comments/4tz6e5/are_aliased_mutable_raw_pointers_ub");
     let raw_posts = reddit::get_posts(raw);
@@ -158,7 +149,7 @@ fn main() {
     let (features, _) = normalize_post_features(&raw_posts[..]);
     let feat_matrix = construct_matrix(&features[..]);
 
-    let rf = load_model();
+    let rf: RandomForest = load_json("./models/clf");
 
     println!("{:?}", rf.predict(&feat_matrix).unwrap());
 
