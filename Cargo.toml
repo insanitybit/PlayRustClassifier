@@ -8,31 +8,32 @@ clap = "2.9.2"
 csv = "0.14.*"
 dedup_by = "*"
 hyper = "0.9.*"
+# pencil = "0.2.*"
 rand = "0.3.*"
 rayon = "0.4.0"
+rust-tfidf = "1.0.*"
 rustc-serialize = "*"
 serde = "0.7.*"
 serde_json = "0.7.*"
 serde_macros = "0.7.*"
 stopwatch = "*"
-rust-tfidf = "1.0.*"
 tiny-keccak = "1.0.*"
-
-[dependencies.rsml]
-path = "../rsml/"
 
 [dependencies.ndarray]
 features = ["rustc-serialize"]
 ndarray = "0.6"
 
-# The release profile, used for `cargo build --release`.
+[dependencies.rsml]
+path = "../rsml/"
+
 [profile.release]
-opt-level = 3
-debug = false
-rpath = false
-lto = true
-debug-assertions = false
 codegen-units = 1
+debug = false
+debug-assertions = false
+lto = true
+opt-level = 3
+rpath = false
+rtions = false
 # panic = 'abort'
 
 # -C target-feature and -C target-cpu
