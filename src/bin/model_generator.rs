@@ -2,13 +2,15 @@
 #![plugin(serde_macros)]
 #![feature(test)]
 
+#[macro_use(time)]
+extern crate playrust_alert;
+
 #[macro_use(stack)]
 extern crate ndarray;
 
 extern crate clap;
 extern crate csv;
 extern crate dedup_by;
-extern crate playrust_alert;
 extern crate rand;
 extern crate rayon;
 extern crate rsml;
@@ -21,6 +23,7 @@ use clap::{Arg, App};
 use dedup_by::dedup_by;
 use rustc_serialize::json;
 use ndarray::{Axis, ArrayBase, Dimension, Array};
+
 use playrust_alert::reddit::{RawPostFeatures, ProcessedPostFeatures};
 use playrust_alert::feature_extraction::{convert_author_to_popularity, convert_is_self,
                                          tfidf_reduce_selftext, subs_to_float, text_to_docs};
@@ -76,16 +79,16 @@ fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> (Vec<ProcessedPostF
     let subreddits: Vec<_> = raw_posts.iter().map(|r| r.subreddit.as_ref()).collect();
     let sub_floats = subs_to_float(&subreddits[..]);
 
-    let unique_word_list = get_unique_word_list(&posts[..]);
-    let unique_word_list: Vec<_> = unique_word_list.iter().map(|s| s.as_ref()).collect();
-    let all_docs = text_to_docs(&posts[..]);
-    let tfidf_reduction = tfidf_reduce_selftext(&posts[..], &unique_word_list[..], &all_docs[..]);
+    // let unique_word_list = get_unique_word_list(&posts[..]);
+    // let unique_word_list: Vec<_> = unique_word_list.iter().map(|s| s.as_ref()).collect();
+    // let all_docs = text_to_docs(&posts[..]);
+    // let tfidf_reduction = tfidf_reduce_selftext(&posts[..], &unique_word_list[..], &all_docs[..]);
     let author_popularity = convert_author_to_popularity(&authors[..]);
 
     authors.sort();
     write_size_and_list(&authors[..], "./data/total_author_list");
-    write_size_and_list(&unique_word_list[..], "./data/unique_word_list");
-    serialize_to_file(&all_docs, "./data/all_docs");
+    // write_size_and_list(&unique_word_list[..], "./data/unique_word_list");
+    // serialize_to_file(&all_docs, "./data/all_docs");
 
     let mut processed = Vec::with_capacity(raw_posts.len());
 
@@ -96,7 +99,7 @@ fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> (Vec<ProcessedPostF
             downs: downs[index],
             ups: ups[index],
             score: scores[index],
-            word_freq: tfidf_reduction[index].clone(),
+            word_freq: vec![],
         };
         processed.push(p);
     }
@@ -148,14 +151,20 @@ fn serialize_to_file<T>(s: &T, path: &str)
     f.flush().unwrap();
 }
 
+fn test() -> u64 {
+    9
+}
+
 fn main() {
     // Deserialize raw reddit post features from an input file, deduplicate by the title, and
     // then shuffle them.
+
     let posts: Vec<_> = {
         let mut posts = get_train_data();
         let mut rng = thread_rng();
         rng.shuffle(&mut posts);
-        posts.into_iter().take(500).collect()
+        // posts.into_iter().take(500).collect()
+        posts
     };
 
     // Generate our processed feature matrix
@@ -165,8 +174,8 @@ fn main() {
     // Split our data such that we train on one set and can test our accuracy on another
     let ground_truth = Array::from_vec(ground_truth);
 
-    let (truth1, truth2) = ground_truth.view().split_at(Axis(0), posts.len() / 8);
-    let (sample1, sample2) = feat_matrix.view().split_at(Axis(0), posts.len() / 8);
+    let (truth1, truth2) = ground_truth.view().split_at(Axis(0), posts.len() / 9);
+    let (sample1, sample2) = feat_matrix.view().split_at(Axis(0), posts.len() / 9);
     // write_ndarray(truth1, "truth1");
     // write_ndarray(truth2, "truth2");
     // write_ndarray(sample1, "sample1");
