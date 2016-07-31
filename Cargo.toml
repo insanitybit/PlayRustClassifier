@@ -21,7 +21,7 @@ tiny-keccak = "1.0.*"
 
 [dependencies.ndarray]
 features = ["rustc-serialize"]
-ndarray = "0.6"
+version = "0.6"
 
 [dependencies.rsml]
 path = "../rsml/"
@@ -33,7 +33,6 @@ debug-assertions = false
 lto = true
 opt-level = 3
 rpath = false
-rtions = false
 # panic = 'abort'
 
 # -C target-feature and -C target-cpu

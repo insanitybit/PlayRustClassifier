@@ -35,8 +35,6 @@ use rustc_serialize::Encodable;
 use std::fs::File;
 use std::io::prelude::*;
 
-
-
 fn get_train_data() -> Vec<RawPostFeatures> {
     let matches = App::new("Model Generator")
                       .version("1.0")
@@ -61,7 +59,7 @@ fn get_train_data() -> Vec<RawPostFeatures> {
 
 // Stores the list of words, separated by new line
 // The first line is the length of the list, for preallocation purposes
-fn write_size_and_list(list: &[&str], filename: &str) {
+fn write_list(list: &[&str], filename: &str) {
     let mut f = File::create(filename).unwrap();
     for item in list {
         writeln!(f, "{}", item).unwrap();
@@ -86,8 +84,8 @@ fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> (Vec<ProcessedPostF
     let author_popularity = convert_author_to_popularity(&authors[..]);
 
     authors.sort();
-    write_size_and_list(&authors[..], "./data/total_author_list");
-    // write_size_and_list(&unique_word_list[..], "./data/unique_word_list");
+    write_list(&authors[..], "./data/total_author_list");
+    // write_list(&unique_word_list[..], "./data/unique_word_list");
     // serialize_to_file(&all_docs, "./data/all_docs");
 
     let mut processed = Vec::with_capacity(raw_posts.len());
@@ -211,11 +209,12 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{subs_to_float, dedup_by};
-
-    // #[test]
-    // fn test_subs_to_float() {
-    //     let subs = vec!["a", "b", "c", "c", "b"];
-    //     assert_eq!(vec![0f64, 1f64, 2f64, 2f64, 1f64], subs_to_float(&subs[..]))
-    // }
+    use super::*;
+    use super::playrust_alert::feature_extraction::subs_to_float;
+    #[test]
+    fn test_subs_to_float() {
+        let subs = vec!["a", "b", "c", "c", "b", "d", "a"];
+        assert_eq!(vec![0f64, 1f64, 2f64, 2f64, 1f64, 3f64, 0f64],
+                   subs_to_float(&subs[..]))
+    }
 }

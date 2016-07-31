@@ -20,7 +20,6 @@ pub fn convert_author_to_popularity(authors: &[&str]) -> Vec<f64> {
     authors.iter()
            .map(|author| *auth_count.get(author).unwrap() as f64 / authors.len() as f64)
            .collect()
-    // auth_count.values().map(|v| *v as f64 / authors.len() as f64).collect()
 }
 
 pub fn text_to_docs(texts: &[&str]) -> Vec<Vec<(String, usize)>> {
@@ -64,25 +63,21 @@ pub fn tfidf_reduce_selftext(self_texts: &[&str],
 
 
 pub fn subs_to_float(subs: &[&str]) -> Vec<f64> {
-    // let mut sub_float_map = BTreeMap::new();
+    let mut sub_float_map = BTreeMap::new();
     let mut sub_floats = Vec::with_capacity(subs.len());
-    // let mut cur_sub = 0f64;
+    let mut cur_sub = 0;
 
     for sub in subs {
-        if *sub == "rust" {
-            sub_floats.push(0f64)
-        } else if *sub == "playrust" {
-            sub_floats.push(1f64)
-        } else {
-            panic!("{}", sub);
-        }
-        // let f = *sub_float_map.entry(sub).or_insert({
-        //     let c = cur_sub;
-        //     cur_sub += 1f64;
-        //     c
-        // });
-        // sub_floats.push(f);
+        let f = *sub_float_map.entry(sub).or_insert_with(|| {
+            let c = cur_sub;
+            cur_sub = c + 1;
+            c
+        });
+        sub_floats.push(f);
     }
+    let sub_floats = sub_floats.into_iter()
+                               .map(|f| f as f64)
+                               .collect();
     // println!("{:?}", sub_floats);
     sub_floats
 }
