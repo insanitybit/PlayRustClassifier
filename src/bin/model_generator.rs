@@ -52,6 +52,7 @@ fn get_train_data() -> Vec<RawPostFeatures> {
     let mut posts: Vec<RawPostFeatures> = rdr.decode()
                                              .map(|raw_post| raw_post.unwrap())
                                              .collect();
+    println!("{:?}", posts.len());
     posts.sort_by(|a, b| a.title.cmp(&b.title));
     dedup_by(&mut posts, |a, b| a.title == b.title);
     posts
@@ -77,16 +78,16 @@ fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> (Vec<ProcessedPostF
     let subreddits: Vec<_> = raw_posts.iter().map(|r| r.subreddit.as_ref()).collect();
     let sub_floats = subs_to_float(&subreddits[..]);
 
-    // let unique_word_list = get_unique_word_list(&posts[..]);
-    // let unique_word_list: Vec<_> = unique_word_list.iter().map(|s| s.as_ref()).collect();
-    // let all_docs = text_to_docs(&posts[..]);
-    // let tfidf_reduction = tfidf_reduce_selftext(&posts[..], &unique_word_list[..], &all_docs[..]);
+    let unique_word_list = get_unique_word_list(&posts[..]);
+    let unique_word_list: Vec<_> = unique_word_list.iter().map(|s| s.as_ref()).collect();
+    let all_docs = text_to_docs(&posts[..]);
+    let tfidf_reduction = tfidf_reduce_selftext(&posts[..], &unique_word_list[..], &all_docs[..]);
     let author_popularity = convert_author_to_popularity(&authors[..]);
 
     authors.sort();
     write_list(&authors[..], "./data/total_author_list");
-    // write_list(&unique_word_list[..], "./data/unique_word_list");
-    // serialize_to_file(&all_docs, "./data/all_docs");
+    write_list(&unique_word_list[..], "./data/unique_word_list");
+    serialize_to_file(&all_docs, "./data/all_docs");
 
     let mut processed = Vec::with_capacity(raw_posts.len());
 
@@ -97,7 +98,7 @@ fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> (Vec<ProcessedPostF
             downs: downs[index],
             ups: ups[index],
             score: scores[index],
-            word_freq: vec![],
+            word_freq: tfidf_reduction[index],
         };
         processed.push(p);
     }
@@ -170,15 +171,15 @@ fn main() {
 
     let (truth1, truth2) = ground_truth.view().split_at(Axis(0), posts.len() / 9);
     let (sample1, sample2) = feat_matrix.view().split_at(Axis(0), posts.len() / 9);
-    // write_ndarray(truth1, "truth1");
-    // write_ndarray(truth2, "truth2");
-    // write_ndarray(sample1, "sample1");
-    // write_ndarray(sample2, "sample2");
+    write_ndarray(truth1, "truth1");
+    write_ndarray(truth2, "truth2");
+    write_ndarray(sample1, "sample1");
+    write_ndarray(sample2, "sample2");
 
     let mut rf = RandomForest::new(1);
     rf.fit(&sample2.to_owned(), &truth2.to_owned());
 
-    // serialize_to_file(&rf, "./models/rf");
+    serialize_to_file(&rf, "./models/rf");
 
     let preds = rf.predict(&sample1.to_owned()).unwrap();
 
