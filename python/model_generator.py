@@ -2,6 +2,8 @@ import sys
 import numpy as np
 import pandas as pd
 import time
+current_milli_time = lambda: int(round(time.time() * 1000))
+
 from sklearn.ensemble import RandomForestClassifier
 
 train_path = sys.argv[1]
@@ -28,15 +30,20 @@ print(test_truth_df.shape)
 
 
 rfc = RandomForestClassifier(n_estimators=10)
-
+start = current_milli_time()
 rfc.fit(train_df, train_truth_df)
+end = current_milli_time()
+
+print("Time to fit: {}", end - start)
 
 prob = rfc.predict_proba(test_df)[:, 1]
-pred = rfc.predict(test_df)
 
-score = rfc.score(test_df, test_truth_df)
 
-for index in range(0, len(test_truth_df)):
-    print("{} {} {}".format(prob[index], pred[index], test_truth_df[index]))
-
-print(score)
+# pred = rfc.predict(test_df)
+#
+# score = rfc.score(test_df, test_truth_df)
+#
+# for index in range(0, len(test_truth_df)):
+#     print("{} {} {}".format(prob[index], pred[index], test_truth_df[index]))
+#
+# print(score)

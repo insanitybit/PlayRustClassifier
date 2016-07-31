@@ -123,7 +123,7 @@ impl RedditClient {
         let data = data.as_array().unwrap();
 
         if after.is_string() {
-            (data.clone(), after.as_string().map(|s| s.to_owned()))
+            (data.clone(), after.as_str().map(|s| s.to_owned()))
         } else {
             (data.clone(), None)
         }

@@ -151,10 +151,6 @@ fn serialize_to_file<T>(s: &T, path: &str)
     f.flush().unwrap();
 }
 
-fn test() -> u64 {
-    9
-}
-
 fn main() {
     // Deserialize raw reddit post features from an input file, deduplicate by the title, and
     // then shuffle them.
