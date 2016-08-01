@@ -49,7 +49,7 @@ fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> (Vec<ProcessedPostF
     let subreddits: Vec<_> = raw_posts.iter().map(|r| r.subreddit.as_ref()).collect();
     let sub_floats = subs_to_float(&subreddits[..]);
     let mut authors: Vec<String> = raw_posts.into_iter().map(|r| r.author.to_owned()).collect();
-    authors.extend_from_slice(&load_list("./data/total_author_list")[..]);
+    authors.extend_from_slice(&load_list("./data/rust_author_list")[..]);
     let authors: Vec<_> = authors.iter().map(|a| a.as_ref()).collect();
     let posts: Vec<&str> = raw_posts.iter().map(|r| r.selftext.as_ref()).collect();
 

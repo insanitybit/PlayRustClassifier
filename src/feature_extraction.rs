@@ -12,11 +12,18 @@ pub fn convert_is_self(b: bool) -> f64 {
     }
 }
 
-pub fn convert_author_to_popularity(authors: &[&str]) -> Vec<f64> {
+pub fn convert_author_to_popularity(authors: &[&str], rust_authors: &[&str]) -> Vec<f64> {
     let mut auth_count = BTreeMap::new();
     for author in authors {
-        *auth_count.entry(author).or_insert(0) += 1;
+        auth_count.insert(author, 0);
     }
+
+    for author in authors {
+        if rust_authors.contains(author) {
+            *auth_count.entry(author).or_insert(0) += 1;
+        }
+    }
+
     authors.iter()
            .map(|author| *auth_count.get(author).unwrap() as f64 / authors.len() as f64)
            .collect()
@@ -61,6 +68,69 @@ pub fn tfidf_reduce_selftext(self_texts: &[&str],
     term_frequency_matrix
 }
 
+pub fn symbol_counts(self_texts: &[&str]) -> Vec<Vec<f64>> {
+    let symbols = ['{', '}', '(', ')', '<', '>', ';', '.', ',', '&', '[', ']', ':', '?', '*', '=',
+                   '!', '/'];
+
+    let mut freq_matrix = Vec::with_capacity(self_texts.len());
+
+    for text in self_texts {
+        let mut char_map = BTreeMap::new();
+
+        for symbol in symbols.iter() {
+            char_map.insert(symbol.to_owned(), 0);
+        }
+
+        for ch in text.chars() {
+            if symbols.contains(&ch) {
+                *char_map.entry(ch).or_insert(0) += 1;
+            }
+        }
+
+        let freq_vec: Vec<_> = char_map.into_iter()
+                                       .collect::<Vec<(_, u64)>>()
+                                       .iter()
+                                       .map(|t| t.1 as f64)
+                                       .collect();
+        freq_matrix.push(freq_vec);
+    }
+    freq_matrix
+}
+
+pub fn interesting_word_freq(self_texts: &[&str], spec_words: &[String]) -> Vec<Vec<f64>> {
+
+    let mut freq_matrix = Vec::with_capacity(self_texts.len());
+    let text_words: Vec<Vec<String>> = self_texts.iter()
+                                                 .map(|t| tfidf_helper::get_words(*t))
+                                                 .collect();
+
+    for (ix, words) in text_words.iter().enumerate() {
+        let mut freq_map: BTreeMap<String, u64> = BTreeMap::new();
+
+        for word in spec_words {
+            freq_map.insert(word.to_owned(), 0);
+        }
+
+        for word in words {
+            if spec_words.contains(&word) {
+                *freq_map.entry(word.to_owned()).or_insert(0) += 1;
+            }
+        }
+
+        let freq_vec: Vec<_> = freq_map.into_iter()
+                                       .collect::<Vec<(_, u64)>>()
+                                       .iter()
+                                       .map(|t| t.1 as f64)
+                                       .collect();
+        if freq_vec.iter().all(|a| *a as u64 == 0) {
+            println!("No interesting words found");
+            println!("{:?}", text_words[ix]);
+        }
+        freq_matrix.push(freq_vec);
+    }
+
+    freq_matrix
+}
 
 pub fn subs_to_float(subs: &[&str]) -> Vec<f64> {
     let mut sub_float_map = BTreeMap::new();
