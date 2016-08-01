@@ -1,7 +1,6 @@
 use rayon::prelude::*;
 use rsml::tfidf_helper::*;
 use tfidf::{TfIdf, TfIdfDefault};
-use stopwatch::Stopwatch;
 use std::collections::BTreeMap;
 
 pub fn convert_is_self(b: bool) -> f64 {
@@ -12,24 +11,26 @@ pub fn convert_is_self(b: bool) -> f64 {
     }
 }
 
-pub fn convert_author_to_popularity(authors: &[&str], rust_authors: &[&str]) -> Vec<f64> {
-    let mut auth_count = BTreeMap::new();
-    for author in authors {
-        auth_count.insert(author, 0);
-    }
+pub fn convert_author_to_popularity<T: AsRef<str>>(authors: &[T],
+                                                   rust_authors: &[&str])
+                                                   -> Vec<f64> {
+    let mut auth_count: BTreeMap<&str, _> = BTreeMap::new();
 
     for author in authors {
-        if rust_authors.contains(author) {
-            *auth_count.entry(author).or_insert(0) += 1;
+        if rust_authors.contains(&author.as_ref()) {
+            *auth_count.entry(author.as_ref()).or_insert(0) += 1;
         }
     }
+    let mut freqs = Vec::with_capacity(authors.len());
 
-    authors.iter()
-           .map(|author| *auth_count.get(author).unwrap() as f64 / authors.len() as f64)
-           .collect()
+    for author in authors {
+        let author_freq = *auth_count.get(author.as_ref()).unwrap_or(&0);
+        freqs.push(author_freq as f64);
+    }
+    freqs
 }
 
-pub fn text_to_docs(texts: &[&str]) -> Vec<Vec<(String, usize)>> {
+pub fn text_to_docs<T: AsRef<str>>(texts: &[&str]) -> Vec<Vec<(String, usize)>> {
     let mut docs = Vec::with_capacity(texts.len());
     texts.par_iter()
          .map(|s| str_to_doc(s))
@@ -54,14 +55,11 @@ pub fn tfidf_reduce_selftext(self_texts: &[&str],
     for doc in docs {
         let mut term_frequencies: Vec<f64> = Vec::with_capacity(words.len());
 
-        // let mut sw = Stopwatch::new();
-        // sw.start();
         words.par_iter()
              .weight_max()
              .map(|word| TfIdfDefault::tfidf(word, &doc, all_docs.iter()))
              .collect_into(&mut term_frequencies);
-        // sw.stop();
-        // println!("{:?}", sw.elapsed_ms());
+
         term_frequency_matrix.push(term_frequencies);
     }
 
@@ -77,21 +75,19 @@ pub fn symbol_counts(self_texts: &[&str]) -> Vec<Vec<f64>> {
     for text in self_texts {
         let mut char_map = BTreeMap::new();
 
-        for symbol in symbols.iter() {
-            char_map.insert(symbol.to_owned(), 0);
-        }
-
         for ch in text.chars() {
             if symbols.contains(&ch) {
                 *char_map.entry(ch).or_insert(0) += 1;
             }
         }
 
-        let freq_vec: Vec<_> = char_map.into_iter()
-                                       .collect::<Vec<(_, u64)>>()
-                                       .iter()
-                                       .map(|t| t.1 as f64)
-                                       .collect();
+        let mut freq_vec = Vec::with_capacity(symbols.len());
+
+        for symbol in symbols.iter() {
+            let symbol_count = *char_map.get(symbol).unwrap_or(&0);
+            freq_vec.push(symbol_count as f64);
+        }
+
         freq_matrix.push(freq_vec);
     }
     freq_matrix
@@ -104,7 +100,7 @@ pub fn interesting_word_freq(self_texts: &[&str], spec_words: &[String]) -> Vec<
                                                  .map(|t| tfidf_helper::get_words(*t))
                                                  .collect();
 
-    for (ix, words) in text_words.iter().enumerate() {
+    for words in text_words.iter() {
         let mut freq_map: BTreeMap<String, u64> = BTreeMap::new();
 
         for word in spec_words {
@@ -112,7 +108,7 @@ pub fn interesting_word_freq(self_texts: &[&str], spec_words: &[String]) -> Vec<
         }
 
         for word in words {
-            if spec_words.contains(&word) {
+            if spec_words.binary_search(&word).is_ok() {
                 *freq_map.entry(word.to_owned()).or_insert(0) += 1;
             }
         }
@@ -122,10 +118,7 @@ pub fn interesting_word_freq(self_texts: &[&str], spec_words: &[String]) -> Vec<
                                        .iter()
                                        .map(|t| t.1 as f64)
                                        .collect();
-        if freq_vec.iter().all(|a| *a as u64 == 0) {
-            println!("No interesting words found");
-            println!("{:?}", text_words[ix]);
-        }
+
         freq_matrix.push(freq_vec);
     }
 

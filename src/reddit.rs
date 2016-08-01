@@ -3,7 +3,6 @@ use rayon::prelude::*;
 use serde_json;
 use serde_json::Value;
 use std::io::prelude::*;
-use stopwatch::Stopwatch;
 use tiny_keccak::Keccak;
 
 #[derive(Deserialize, Debug, Clone, RustcEncodable, RustcDecodable)]
@@ -33,6 +32,8 @@ pub struct ProcessedPostFeatures {
     pub score: f64,
     /// Word frequency vector
     pub word_freq: Vec<f64>,
+    /// symbol frequency vector
+    pub symbol_freq: Vec<f64>,
 }
 
 pub struct RedditClient {

@@ -6,6 +6,7 @@ extern crate clap;
 extern crate csv;
 extern crate rustc_serialize;
 // extern crate pencil;
+#[macro_use(time)]
 extern crate playrust_alert;
 
 extern crate rsml;
@@ -16,7 +17,8 @@ use playrust_alert::reddit;
 // use pencil::{Pencil, Request, Response, PencilResult};
 use playrust_alert::reddit::{RawPostFeatures, ProcessedPostFeatures};
 use playrust_alert::feature_extraction::{convert_author_to_popularity, convert_is_self,
-                                         tfidf_reduce_selftext, subs_to_float};
+                                         tfidf_reduce_selftext, subs_to_float, symbol_counts,
+                                         interesting_word_freq};
 
 use rsml::random_forest::RandomForest;
 use rsml::traits::SupervisedLearning;
@@ -48,18 +50,38 @@ fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> (Vec<ProcessedPostF
     let scores: Vec<_> = raw_posts.iter().map(|r| r.score as f64).collect();
     let subreddits: Vec<_> = raw_posts.iter().map(|r| r.subreddit.as_ref()).collect();
     let sub_floats = subs_to_float(&subreddits[..]);
-    let mut authors: Vec<String> = raw_posts.into_iter().map(|r| r.author.to_owned()).collect();
-    authors.extend_from_slice(&load_list("./data/rust_author_list")[..]);
-    let authors: Vec<_> = authors.iter().map(|a| a.as_ref()).collect();
+
+    let authors: Vec<&str> = raw_posts.iter().map(|s| &s.author[..]).collect();
+    let rust_authors = load_list("./data/rust_author_list");
+    let rust_authors: Vec<_> = rust_authors.iter().map(|s| &s[..]).collect();
+    let titles: Vec<&str> = raw_posts.iter().map(|r| r.title.as_ref()).collect();
     let posts: Vec<&str> = raw_posts.iter().map(|r| r.selftext.as_ref()).collect();
 
-    let unique_word_list = load_list("./data/unique_word_list");
-    let unique_word_list: Vec<_> = unique_word_list.iter().map(|s| s.as_ref()).collect();
+    let interesting_words = load_list("./static_data/words_of_interest");
 
-    let all_docs: Vec<Vec<(String, usize)>> = load_json("./data/all_docs");
-    let tfidf_reduction = tfidf_reduce_selftext(&posts[..], &unique_word_list[..], &all_docs[..]);
+    let mut terms = Vec::new();
 
-    let author_popularity = convert_author_to_popularity(&authors[..]);
+    for (post, title) in posts.iter().zip(titles.iter()) {
+        let mut comb = String::new();
+        comb.push_str(post);
+        comb.push_str(" ");
+        comb.push_str(title);
+        terms.push(comb);
+    }
+
+    let terms: Vec<&str> = terms.iter().map(|s| s.as_str()).collect();
+
+    let term_frequencies = interesting_word_freq(&terms[..], &interesting_words[..]);
+
+    let symbol_frequences = symbol_counts(&posts[..]);
+
+    let mut freqs = Vec::with_capacity(symbol_frequences.len() + term_frequencies.len());
+
+    freqs.extend_from_slice(&term_frequencies[..]);
+    freqs.extend_from_slice(&symbol_frequences[..]);
+
+    let author_popularity = convert_author_to_popularity(&authors[..], &rust_authors[..]);
+
     let mut processed = Vec::with_capacity(raw_posts.len());
 
     for index in 0..raw_posts.len() {
@@ -69,7 +91,7 @@ fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> (Vec<ProcessedPostF
             downs: downs[index],
             ups: ups[index],
             score: scores[index],
-            word_freq: tfidf_reduction[index].clone(),
+            word_freq: freqs[index].clone(),
         };
         processed.push(p);
     }
@@ -151,6 +173,6 @@ fn main() {
 
     let rf: RandomForest = load_json("./models/clf");
 
-    println!("{:?}", rf.predict(&feat_matrix).unwrap());
+    println!("{:?}", time!(rf.predict(&feat_matrix).unwrap()));
 
 }

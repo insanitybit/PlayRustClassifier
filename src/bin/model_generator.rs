@@ -94,16 +94,11 @@ fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> (Vec<ProcessedPostF
                                                })
                                                .collect();
     let mut posts: Vec<&str> = raw_posts.iter().map(|r| r.selftext.as_ref()).collect();
-    let mut titles: Vec<&str> = raw_posts.iter().map(|r| r.title.as_ref()).collect();
+    let titles: Vec<&str> = raw_posts.iter().map(|r| r.title.as_ref()).collect();
     let subreddits: Vec<_> = raw_posts.iter().map(|r| r.subreddit.as_ref()).collect();
     let sub_floats = subs_to_float(&subreddits[..]);
 
-    // let unique_word_list = get_unique_word_list(&posts[..]);
-    // let unique_word_list: Vec<_> = unique_word_list.iter().map(|s| s.as_ref()).collect();
-    // let all_docs = text_to_docs(&posts[..]);
-    // let tfidf_reduction = tfidf_reduce_selftext(&posts[..], &unique_word_list[..], &all_docs[..]);
-
-    let interesting_words = load_list("./data/words_of_interest");
+    let interesting_words = load_list("./static_data/words_of_interest");
 
     let mut terms = Vec::new();
 
@@ -118,13 +113,7 @@ fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> (Vec<ProcessedPostF
     let terms: Vec<&str> = terms.iter().map(|s| s.as_str()).collect();
 
     let term_frequencies = interesting_word_freq(&terms[..], &interesting_words[..]);
-
     let symbol_frequences = symbol_counts(&posts[..]);
-
-    let mut freqs = Vec::with_capacity(symbol_frequences.len() + term_frequencies.len());
-
-    freqs.extend_from_slice(&term_frequencies[..]);
-    freqs.extend_from_slice(&symbol_frequences[..]);
 
     let author_popularity = convert_author_to_popularity(&authors[..], &rust_authors[..]);
 
@@ -140,7 +129,8 @@ fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> (Vec<ProcessedPostF
             downs: downs[index],
             ups: ups[index],
             score: scores[index],
-            word_freq: freqs[index].clone(),
+            word_freq: term_frequencies[index].clone(),
+            symbol_freq: symbol_frequences[index].clone(),
         };
         processed.push(p);
     }
@@ -160,15 +150,19 @@ fn construct_matrix(post_features: &[ProcessedPostFeatures]) -> ArrayBase<Vec<f6
     assert_eq!(score.len(), post_features.len());
 
     let term_count = post_features.iter().last().unwrap().word_freq.iter().count();
+    let term_count = term_count + post_features.iter().last().unwrap().symbol_freq.iter().count();
     let term_frequencies: Vec<_> = post_features.iter().map(|p| &p.word_freq[..]).collect();
+    let symbol_frequencies: Vec<_> = post_features.iter().map(|p| &p.symbol_freq[..]).collect();
 
     let mut row = vec![auth_pop[0], downs[0], ups[0], score[0]];
     row.extend_from_slice(term_frequencies[0]);
+    row.extend_from_slice(symbol_frequencies[0]);
     let mut a = stack!(Axis(0), row);
 
     for index in 1..post_features.len() {
         let mut row = vec![auth_pop[index], downs[index], ups[index], score[index]];
         row.extend_from_slice(term_frequencies[index]);
+        row.extend_from_slice(symbol_frequencies[index]);
         a = stack!(Axis(0), a, row);
     }
     a.into_shape((post_features.len(), term_count + 4)).unwrap()
