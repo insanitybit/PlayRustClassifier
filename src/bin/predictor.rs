@@ -1,45 +1,22 @@
 #![feature(test, custom_derive, plugin)]
 #[macro_use(stack)]
 extern crate ndarray;
+#[macro_use(time)]
+extern crate playrust_alert;
 
 extern crate clap;
 extern crate csv;
 extern crate rustc_serialize;
-// extern crate pencil;
-#[macro_use(time)]
-extern crate playrust_alert;
-
 extern crate rsml;
 
 use clap::{Arg, App};
 use ndarray::{Axis, ArrayBase};
-use playrust_alert::reddit;
-use playrust_alert::reddit::{RawPostFeatures, ProcessedPostFeatures};
+use playrust_alert::reddit::{RawPostFeatures, ProcessedPostFeatures, get_posts, RedditClient};
 use playrust_alert::feature_extraction::{convert_author_to_popularity, convert_is_self,
                                          subs_to_float, symbol_counts, interesting_word_freq};
-
+use playrust_alert::util::{load_list, load_json};
 use rsml::random_forest::RandomForest;
 use rsml::traits::SupervisedLearning;
-
-use rustc_serialize::{json, Decodable};
-
-use std::fs::File;
-use std::io::prelude::*;
-
-fn load_json<T: Decodable>(path: &str) -> T {
-    let mut f = File::open(path).unwrap();
-    let mut json_str = String::new();
-
-    let _ = f.read_to_string(&mut json_str).unwrap();
-    json::decode(&json_str).unwrap()
-}
-
-fn load_list(path: &str) -> Vec<String> {
-    let mut f = File::open(path).unwrap();
-    let mut unpslit_str = String::new();
-    let _ = f.read_to_string(&mut unpslit_str).unwrap();
-    unpslit_str.lines().map(String::from).collect()
-}
 
 fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> (Vec<ProcessedPostFeatures>, Vec<f64>) {
     let selfs: Vec<_> = raw_posts.iter().map(|r| convert_is_self(r.is_self)).collect();
@@ -166,9 +143,9 @@ fn get_pred_data() -> Vec<RawPostFeatures> {
 // }
 
 fn main() {
-    let mut reddit_client = reddit::RedditClient::new();
+    let mut reddit_client = RedditClient::new();
     let raw = reddit_client.get_raw_features_from_url("https://www.reddit.com/r/rust/comments/4tz6e5/are_aliased_mutable_raw_pointers_ub");
-    let raw_posts = reddit::get_posts(raw);
+    let raw_posts = get_posts(raw);
 
     let (features, _) = normalize_post_features(&raw_posts[..]);
     let feat_matrix = construct_matrix(&features[..]);

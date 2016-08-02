@@ -18,6 +18,8 @@ extern crate tfidf;
 
 pub mod feature_extraction;
 pub mod reddit;
+pub mod util;
+
 pub use stopwatch::Stopwatch;
 
 #[macro_export]

@@ -20,18 +20,17 @@ extern crate stopwatch;
 
 use clap::{Arg, App};
 use dedup_by::dedup_by;
-use rustc_serialize::json;
-use ndarray::{Axis, ArrayBase, Dimension, Array};
+use ndarray::{Axis, ArrayBase, Array};
 
 use playrust_alert::reddit::{RawPostFeatures, ProcessedPostFeatures};
 use playrust_alert::feature_extraction::{convert_author_to_popularity, convert_is_self,
                                          subs_to_float, interesting_word_freq, symbol_counts};
+
+use playrust_alert::util::*;
+
 use rand::{thread_rng, Rng};
 use rsml::random_forest::model::*;
 use rsml::traits::SupervisedLearning;
-use rustc_serialize::Encodable;
-use std::fs::File;
-use std::io::prelude::*;
 
 fn get_train_data() -> Vec<RawPostFeatures> {
     let matches = App::new("Model Generator")
@@ -60,22 +59,6 @@ fn get_train_data() -> Vec<RawPostFeatures> {
     posts
 }
 
-// Stores the list of words, separated by new line
-// The first line is the length of the list, for preallocation purposes
-fn write_list(list: &[&str], filename: &str) {
-    let mut f = File::create(filename).unwrap();
-    for item in list {
-        writeln!(f, "{}", item).unwrap();
-    }
-    let _ = f.flush();
-}
-
-fn load_list(path: &str) -> Vec<String> {
-    let mut f = File::open(path).unwrap();
-    let mut unpslit_str = String::new();
-    let _ = f.read_to_string(&mut unpslit_str).unwrap();
-    unpslit_str.lines().map(String::from).collect()
-}
 
 fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> (Vec<ProcessedPostFeatures>, Vec<f64>) {
     let selfs: Vec<_> = raw_posts.iter().map(|r| convert_is_self(r.is_self)).collect();
@@ -168,24 +151,6 @@ fn construct_matrix(post_features: &[ProcessedPostFeatures]) -> ArrayBase<Vec<f6
         a = stack!(Axis(0), a, row);
     }
     a.into_shape((post_features.len(), term_count)).unwrap()
-}
-
-fn write_ndarray<T: Dimension>(nd: ndarray::ArrayBase<ndarray::ViewRepr<&f64>, T>, path: &str) {
-    let mut wtr = csv::Writer::from_file(format!("./data/{}.csv", path)).unwrap();
-    // wtr.encode(nd);
-    for record in nd.inner_iter() {
-        let _ = wtr.encode(record);
-    }
-}
-
-fn serialize_to_file<T>(s: &T, path: &str)
-    where T: Encodable
-{
-    let serialized = json::encode(&s).unwrap();
-
-    let mut f = File::create(path).unwrap();
-    write!(f, "{}", serialized).unwrap();
-    f.flush().unwrap();
 }
 
 fn main() {
