@@ -1,4 +1,5 @@
 use rayon::prelude::*;
+use regex::Regex;
 use rsml::tfidf_helper::*;
 use tfidf::{TfIdf, TfIdfDefault};
 use std::collections::BTreeMap;
@@ -66,9 +67,38 @@ pub fn tfidf_reduce_selftext(self_texts: &[&str],
     term_frequency_matrix
 }
 
+fn bool_to_f64(b: bool) -> f64 {
+    if b {
+        1f64
+    } else {
+        0f64
+    }
+}
+
+pub fn check_for_code(self_texts: &[&str]) -> Vec<Vec<f64>> {
+    lazy_static! {
+        static ref FN_REGEX: Regex = Regex::new(r".*fn [:alpha:]{1}[:word:]*\(.*\)").expect("fn_regex");
+        static ref LET_REGEX: Regex = Regex::new(r".*let( mut)? [:alpha:]{1}[:word:]*.* = .*;").expect("let_regex");
+        static ref IF_LET_REGEX: Regex = Regex::new(r".*if let .* = match").expect("if_let_regex");
+        static ref MACRO_REGEX: Regex = Regex::new(r".*[:alpha:]{1}[:word:]*! {0,1}[\{\(\[].*[\)\]\}]").expect("macro_regex");
+    }
+
+    self_texts.iter()
+              .map(|text| {
+                  vec![FN_REGEX.is_match(text),
+                       LET_REGEX.is_match(text),
+                       IF_LET_REGEX.is_match(text),
+                       MACRO_REGEX.is_match(text)]
+                      .into_iter()
+                      .map(|b| bool_to_f64(b))
+                      .collect()
+              })
+              .collect()
+}
+
 pub fn symbol_counts(self_texts: &[&str]) -> Vec<Vec<f64>> {
-    let symbols = ['{', '}', '(', ')', '<', '>', ';', '.', ',', '&', '[', ']', ':', '?', '*', '=',
-                   '!', '/', '\\', '$', '-', '+', '|', '`', '_', '~', '%'];
+    let symbols = ['_', '-', ';', ':', '!', '?', '.', '(', ')', '[', ']', '{', '}', '*', '/',
+                   '\\', '&', '%', '`', '+', '<', '=', '>', '|', '~', '$'];
 
     let mut freq_matrix = Vec::with_capacity(self_texts.len());
 
@@ -76,7 +106,7 @@ pub fn symbol_counts(self_texts: &[&str]) -> Vec<Vec<f64>> {
         let mut char_map = BTreeMap::new();
 
         for ch in text.chars() {
-            if symbols.contains(&ch) {
+            if symbols.binary_search(&ch).is_ok() {
                 *char_map.entry(ch).or_insert(0) += 1;
             }
         }
@@ -96,9 +126,10 @@ pub fn symbol_counts(self_texts: &[&str]) -> Vec<Vec<f64>> {
 pub fn interesting_word_freq(self_texts: &[&str], spec_words: &[String]) -> Vec<Vec<f64>> {
 
     let mut freq_matrix = Vec::with_capacity(self_texts.len());
-    let text_words: Vec<Vec<String>> = self_texts.iter()
-                                                 .map(|t| tfidf_helper::get_words(*t))
-                                                 .collect();
+    let text_words: Vec<Vec<String>> = time!(self_texts.iter()
+                                                       .map(|t| tfidf_helper::get_words(*t))
+                                                       .collect());
+
 
     for words in text_words.iter() {
         let mut freq_map: BTreeMap<String, u64> = BTreeMap::new();
@@ -143,4 +174,42 @@ pub fn subs_to_float(subs: &[&str]) -> Vec<f64> {
                                .collect();
     // println!("{:?}", sub_floats);
     sub_floats
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_rust_code_search() {
+        let texts = vec!["Hey I need help with this function: pub fn get_stuff1(thing: &str) -> \
+                          String {
+                          let mut x: Option<_> = {Some(\"False\")};
+
+                          if let Some(s) = match x {
+                              println!(\"{:?}\", s);
+                          }
+
+                          return x;
+                        }"];
+        let r = check_for_code(&texts[..]);
+        println!("{:?}", r);
+    }
+
+    #[test]
+    fn test_word_freq() {
+        let texts = vec!["the lazy brown fox jumped quickly = over the lazy fence"];
+        let interesting_words = vec!["fence".to_owned(),
+                                     "juniper".to_owned(),
+                                     "lazy".to_owned(),
+                                     "orange".to_owned(),
+                                     "quickly".to_owned()];
+
+        let expected = vec![1f64, 0f64, 2f64, 0f64, 1f64];
+
+        let frequencies = interesting_word_freq(&texts[..], &interesting_words[..]);
+
+        assert_eq!(expected, frequencies[0]);
+    }
 }

@@ -30,12 +30,14 @@ pub struct ProcessedPostFeatures {
     pub ups: f64,
     /// The overall score of the post
     pub score: f64,
+    /// Length of the postcharacters
+    pub post_len: f64,
     /// Word frequency vector
     pub word_freq: Vec<f64>,
     /// symbol frequency vector
     pub symbol_freq: Vec<f64>,
-    /// Length of the postcharacters
-    pub post_len: f64,
+    /// Matches against regexes for rust code
+    pub regex_matches: Vec<f64>,
 }
 
 pub struct RedditClient {

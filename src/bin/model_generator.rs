@@ -24,7 +24,8 @@ use ndarray::{Axis, ArrayBase, Array};
 
 use playrust_alert::reddit::{RawPostFeatures, ProcessedPostFeatures};
 use playrust_alert::feature_extraction::{convert_author_to_popularity, convert_is_self,
-                                         subs_to_float, interesting_word_freq, symbol_counts};
+                                         check_for_code, subs_to_float, interesting_word_freq,
+                                         symbol_counts};
 
 use playrust_alert::util::*;
 
@@ -96,6 +97,7 @@ fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> (Vec<ProcessedPostF
 
     let term_frequencies = interesting_word_freq(&terms[..], &interesting_words[..]);
     let symbol_frequences = symbol_counts(&posts[..]);
+    let rust_regexes = check_for_code(&posts[..]);
 
     let author_popularity = convert_author_to_popularity(&authors[..], &rust_authors[..]);
 
@@ -114,6 +116,7 @@ fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> (Vec<ProcessedPostF
             word_freq: term_frequencies[index].clone(),
             symbol_freq: symbol_frequences[index].clone(),
             post_len: post_lens[index],
+            regex_matches: rust_regexes[index].clone(),
         };
         processed.push(p);
     }
@@ -130,14 +133,18 @@ fn construct_matrix(post_features: &[ProcessedPostFeatures]) -> ArrayBase<Vec<f6
 
     let term_count = post_features.iter().last().unwrap().word_freq.iter().count();
     let term_count = term_count + post_features.iter().last().unwrap().symbol_freq.iter().count();
+    let term_count = term_count + post_features.iter().last().unwrap().regex_matches.iter().count();
+
     let term_frequencies: Vec<_> = post_features.iter().map(|p| &p.word_freq[..]).collect();
     let symbol_frequencies: Vec<_> = post_features.iter().map(|p| &p.symbol_freq[..]).collect();
+    let regex_matches: Vec<_> = post_features.iter().map(|p| &p.regex_matches[..]).collect();
 
     let mut row = vec![auth_pop[0], downs[0], ups[0], score[0], post_lens[0]];
     let term_count = term_count + row.len();
 
     row.extend_from_slice(term_frequencies[0]);
     row.extend_from_slice(symbol_frequencies[0]);
+    row.extend_from_slice(regex_matches[0]);
     let mut a = stack!(Axis(0), row);
 
     for index in 1..post_features.len() {
@@ -148,6 +155,7 @@ fn construct_matrix(post_features: &[ProcessedPostFeatures]) -> ArrayBase<Vec<f6
                            post_lens[index]];
         row.extend_from_slice(term_frequencies[index]);
         row.extend_from_slice(symbol_frequencies[index]);
+        row.extend_from_slice(regex_matches[index]);
         a = stack!(Axis(0), a, row);
     }
     a.into_shape((post_features.len(), term_count)).unwrap()
