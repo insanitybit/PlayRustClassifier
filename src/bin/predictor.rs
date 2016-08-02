@@ -16,8 +16,7 @@ use ndarray::{Axis, ArrayBase};
 use playrust_alert::reddit;
 use playrust_alert::reddit::{RawPostFeatures, ProcessedPostFeatures};
 use playrust_alert::feature_extraction::{convert_author_to_popularity, convert_is_self,
-                                         tfidf_reduce_selftext, subs_to_float, symbol_counts,
-                                         interesting_word_freq};
+                                         subs_to_float, symbol_counts, interesting_word_freq};
 
 use rsml::random_forest::RandomForest;
 use rsml::traits::SupervisedLearning;
@@ -71,7 +70,7 @@ fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> (Vec<ProcessedPostF
     let terms: Vec<&str> = terms.iter().map(|s| s.as_str()).collect();
 
     let term_frequencies = interesting_word_freq(&terms[..], &interesting_words[..]);
-    let symbol_frequences = symbol_counts(&posts[..]);
+    let symbol_frequencies = symbol_counts(&posts[..]);
 
     let author_popularity = convert_author_to_popularity(&authors[..], &rust_authors[..]);
 
@@ -85,7 +84,7 @@ fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> (Vec<ProcessedPostF
             ups: ups[index],
             score: scores[index],
             word_freq: term_frequencies[index].clone(),
-            symbol_freq: symbol_frequences[index].clone(),
+            symbol_freq: symbol_frequencies[index].clone(),
         };
         processed.push(p);
     }
@@ -109,15 +108,20 @@ fn construct_matrix(post_features: &[ProcessedPostFeatures]) -> ArrayBase<Vec<f6
     let symbol_frequencies: Vec<_> = post_features.iter().map(|p| &p.symbol_freq[..]).collect();
 
     let mut row = vec![auth_pop[0], downs[0], ups[0], score[0]];
+    let term_count = term_count + row.len();
+
     row.extend_from_slice(term_frequencies[0]);
+    row.extend_from_slice(symbol_frequencies[0]);
     let mut a = stack!(Axis(0), row);
 
     for index in 1..post_features.len() {
         let mut row = vec![auth_pop[index], downs[index], ups[index], score[index]];
+
         row.extend_from_slice(term_frequencies[index]);
+        row.extend_from_slice(symbol_frequencies[index]);
         a = stack!(Axis(0), a, row);
     }
-    a.into_shape((post_features.len(), term_count + 4)).expect("Could not reshape a")
+    a.into_shape((post_features.len(), term_count)).expect("Could not reshape a")
 }
 
 fn get_pred_data() -> Vec<RawPostFeatures> {

@@ -17,7 +17,6 @@ extern crate rsml;
 extern crate rustc_serialize;
 extern crate serde_json;
 extern crate stopwatch;
-extern crate tfidf;
 
 use clap::{Arg, App};
 use dedup_by::dedup_by;
@@ -26,12 +25,10 @@ use ndarray::{Axis, ArrayBase, Dimension, Array};
 
 use playrust_alert::reddit::{RawPostFeatures, ProcessedPostFeatures};
 use playrust_alert::feature_extraction::{convert_author_to_popularity, convert_is_self,
-                                         tfidf_reduce_selftext, subs_to_float, text_to_docs,
-                                         interesting_word_freq, symbol_counts};
+                                         subs_to_float, interesting_word_freq, symbol_counts};
 use rand::{thread_rng, Rng};
 use rsml::random_forest::model::*;
 use rsml::traits::SupervisedLearning;
-use rsml::tfidf_helper::get_unique_word_list;
 use rustc_serialize::Encodable;
 use std::fs::File;
 use std::io::prelude::*;
@@ -50,9 +47,9 @@ fn get_train_data() -> Vec<RawPostFeatures> {
 
     let mut rdr = csv::Reader::from_file(train_path).unwrap();
 
-    let mut posts: Vec<RawPostFeatures> = rdr.decode()
-                                             .map(|raw_post| raw_post.unwrap())
-                                             .collect();
+    let posts: Vec<RawPostFeatures> = rdr.decode()
+                                         .map(|raw_post| raw_post.unwrap())
+                                         .collect();
 
     let mut posts: Vec<RawPostFeatures> = posts.into_iter()
                                                .filter(|raw_post| raw_post.selftext.len() > 8)
@@ -86,14 +83,14 @@ fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> (Vec<ProcessedPostF
     let ups: Vec<_> = raw_posts.iter().map(|r| r.ups as f64).collect();
     let scores: Vec<_> = raw_posts.iter().map(|r| r.score as f64).collect();
     let mut authors: Vec<&str> = raw_posts.iter().map(|r| r.author.as_ref()).collect();
-    let mut rust_authors: Vec<&str> = raw_posts.iter()
-                                               .filter_map(|r| if r.subreddit == "rust" {
-                                                   Some(r.author.as_ref())
-                                               } else {
-                                                   None
-                                               })
-                                               .collect();
-    let mut posts: Vec<&str> = raw_posts.iter().map(|r| r.selftext.as_ref()).collect();
+    let rust_authors: Vec<&str> = raw_posts.iter()
+                                           .filter_map(|r| if r.subreddit == "rust" {
+                                               Some(r.author.as_ref())
+                                           } else {
+                                               None
+                                           })
+                                           .collect();
+    let posts: Vec<&str> = raw_posts.iter().map(|r| r.selftext.as_ref()).collect();
     let titles: Vec<&str> = raw_posts.iter().map(|r| r.title.as_ref()).collect();
     let subreddits: Vec<_> = raw_posts.iter().map(|r| r.subreddit.as_ref()).collect();
     let sub_floats = subs_to_float(&subreddits[..]);
@@ -144,17 +141,14 @@ fn construct_matrix(post_features: &[ProcessedPostFeatures]) -> ArrayBase<Vec<f6
     let ups: Vec<_> = post_features.iter().map(|p| p.ups).collect();
     let score: Vec<_> = post_features.iter().map(|p| p.score).collect();
 
-    assert_eq!(auth_pop.len(), post_features.len());
-    assert_eq!(downs.len(), post_features.len());
-    assert_eq!(ups.len(), post_features.len());
-    assert_eq!(score.len(), post_features.len());
-
     let term_count = post_features.iter().last().unwrap().word_freq.iter().count();
     let term_count = term_count + post_features.iter().last().unwrap().symbol_freq.iter().count();
     let term_frequencies: Vec<_> = post_features.iter().map(|p| &p.word_freq[..]).collect();
     let symbol_frequencies: Vec<_> = post_features.iter().map(|p| &p.symbol_freq[..]).collect();
 
     let mut row = vec![auth_pop[0], downs[0], ups[0], score[0]];
+    let term_count = term_count + row.len();
+
     row.extend_from_slice(term_frequencies[0]);
     row.extend_from_slice(symbol_frequencies[0]);
     let mut a = stack!(Axis(0), row);
@@ -165,7 +159,7 @@ fn construct_matrix(post_features: &[ProcessedPostFeatures]) -> ArrayBase<Vec<f6
         row.extend_from_slice(symbol_frequencies[index]);
         a = stack!(Axis(0), a, row);
     }
-    a.into_shape((post_features.len(), term_count + 4)).unwrap()
+    a.into_shape((post_features.len(), term_count)).unwrap()
 }
 
 fn write_ndarray<T: Dimension>(nd: ndarray::ArrayBase<ndarray::ViewRepr<&f64>, T>, path: &str) {
