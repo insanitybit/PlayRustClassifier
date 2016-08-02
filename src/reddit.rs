@@ -34,6 +34,8 @@ pub struct ProcessedPostFeatures {
     pub word_freq: Vec<f64>,
     /// symbol frequency vector
     pub symbol_freq: Vec<f64>,
+    /// Length of the postcharacters
+    pub post_len: f64,
 }
 
 pub struct RedditClient {

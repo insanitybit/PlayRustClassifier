@@ -91,6 +91,8 @@ fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> (Vec<ProcessedPostF
                                            })
                                            .collect();
     let posts: Vec<&str> = raw_posts.iter().map(|r| r.selftext.as_ref()).collect();
+    let post_lens: Vec<f64> = raw_posts.iter().map(|r| r.selftext.len() as f64).collect();
+
     let titles: Vec<&str> = raw_posts.iter().map(|r| r.title.as_ref()).collect();
     let subreddits: Vec<_> = raw_posts.iter().map(|r| r.subreddit.as_ref()).collect();
     let sub_floats = subs_to_float(&subreddits[..]);
@@ -128,6 +130,7 @@ fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> (Vec<ProcessedPostF
             score: scores[index],
             word_freq: term_frequencies[index].clone(),
             symbol_freq: symbol_frequences[index].clone(),
+            post_len: post_lens[index],
         };
         processed.push(p);
     }
@@ -140,13 +143,14 @@ fn construct_matrix(post_features: &[ProcessedPostFeatures]) -> ArrayBase<Vec<f6
     let downs: Vec<_> = post_features.iter().map(|p| p.downs).collect();
     let ups: Vec<_> = post_features.iter().map(|p| p.ups).collect();
     let score: Vec<_> = post_features.iter().map(|p| p.score).collect();
+    let post_lens: Vec<_> = post_features.iter().map(|p| p.post_len).collect();
 
     let term_count = post_features.iter().last().unwrap().word_freq.iter().count();
     let term_count = term_count + post_features.iter().last().unwrap().symbol_freq.iter().count();
     let term_frequencies: Vec<_> = post_features.iter().map(|p| &p.word_freq[..]).collect();
     let symbol_frequencies: Vec<_> = post_features.iter().map(|p| &p.symbol_freq[..]).collect();
 
-    let mut row = vec![auth_pop[0], downs[0], ups[0], score[0]];
+    let mut row = vec![auth_pop[0], downs[0], ups[0], score[0], post_lens[0]];
     let term_count = term_count + row.len();
 
     row.extend_from_slice(term_frequencies[0]);
@@ -154,7 +158,11 @@ fn construct_matrix(post_features: &[ProcessedPostFeatures]) -> ArrayBase<Vec<f6
     let mut a = stack!(Axis(0), row);
 
     for index in 1..post_features.len() {
-        let mut row = vec![auth_pop[index], downs[index], ups[index], score[index]];
+        let mut row = vec![auth_pop[index],
+                           downs[index],
+                           ups[index],
+                           score[index],
+                           post_lens[index]];
         row.extend_from_slice(term_frequencies[index]);
         row.extend_from_slice(symbol_frequencies[index]);
         a = stack!(Axis(0), a, row);

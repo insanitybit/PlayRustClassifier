@@ -54,6 +54,7 @@ fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> (Vec<ProcessedPostF
     let rust_authors: Vec<_> = rust_authors.iter().map(|s| &s[..]).collect();
     let titles: Vec<&str> = raw_posts.iter().map(|r| r.title.as_ref()).collect();
     let posts: Vec<&str> = raw_posts.iter().map(|r| r.selftext.as_ref()).collect();
+    let post_lens: Vec<f64> = raw_posts.iter().map(|r| r.selftext.len() as f64).collect();
 
     let interesting_words = load_list("./static_data/words_of_interest");
 
@@ -85,6 +86,7 @@ fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> (Vec<ProcessedPostF
             score: scores[index],
             word_freq: term_frequencies[index].clone(),
             symbol_freq: symbol_frequencies[index].clone(),
+            post_len: post_lens[index],
         };
         processed.push(p);
     }

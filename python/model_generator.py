@@ -29,7 +29,7 @@ print(test_df.shape)
 print(test_truth_df.shape)
 
 
-rfc = RandomForestClassifier(n_estimators=25)
+rfc = RandomForestClassifier(n_estimators=20, random_state=42)
 start = current_milli_time()
 rfc.fit(train_df, train_truth_df)
 end = current_milli_time()

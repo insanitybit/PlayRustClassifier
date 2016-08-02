@@ -17,11 +17,13 @@ pub fn convert_author_to_popularity<T: AsRef<str>>(authors: &[T],
     let mut auth_count: BTreeMap<&str, _> = BTreeMap::new();
 
     for author in authors {
-        *auth_count.entry(author.as_ref()).or_insert(0) += 1;
+        if rust_authors.contains(&author.as_ref()) {
+            *auth_count.entry(author.as_ref()).or_insert(0) += 1;
+        }
     }
     let mut freqs = Vec::with_capacity(authors.len());
 
-    for author in rust_authors {
+    for author in authors {
         let author_freq = *auth_count.get(author.as_ref()).unwrap_or(&0);
         freqs.push(author_freq as f64);
     }
@@ -74,7 +76,9 @@ pub fn symbol_counts(self_texts: &[&str]) -> Vec<Vec<f64>> {
         let mut char_map = BTreeMap::new();
 
         for ch in text.chars() {
-            *char_map.entry(ch).or_insert(0) += 1;
+            if symbols.contains(&ch) {
+                *char_map.entry(ch).or_insert(0) += 1;
+            }
         }
 
         let mut freq_vec = Vec::with_capacity(symbols.len());
@@ -99,16 +103,21 @@ pub fn interesting_word_freq(self_texts: &[&str], spec_words: &[String]) -> Vec<
     for words in text_words.iter() {
         let mut freq_map: BTreeMap<String, u64> = BTreeMap::new();
 
+        for word in spec_words {
+            freq_map.insert(word.to_owned(), 0);
+        }
+
         for word in words {
-            *freq_map.entry(word.to_owned()).or_insert(0) += 1;
+            if spec_words.binary_search(&word).is_ok() {
+                *freq_map.entry(word.to_owned()).or_insert(0) += 1;
+            }
         }
 
-        let mut freq_vec: Vec<_> = Vec::with_capacity(spec_words.len());
-
-        for word in spec_words.iter() {
-            let word_count = *freq_map.get(word).unwrap_or(&0);
-            freq_vec.push(word_count as f64);
-        }
+        let freq_vec: Vec<_> = freq_map.into_iter()
+                                       .collect::<Vec<(_, u64)>>()
+                                       .iter()
+                                       .map(|t| t.1 as f64)
+                                       .collect();
 
         freq_matrix.push(freq_vec);
     }
