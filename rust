@@ -1,0 +1,14 @@
+3974
+2322
+raw_posts.iter().map(|r| r.selftext.as_ref()).collect() took 0,ms
+raw_posts.iter().map(|r| r.selftext.len() as f64).collect() took 0,ms
+raw_posts.iter().map(|r| r.title.as_ref()).collect() took 0,ms
+raw_posts.iter().map(|r| r.subreddit.as_ref()).collect() took 0,ms
+subs_to_float(&subreddits[..]) took 0,ms
+self_texts.iter().map(|t| tfidf_helper::get_words(*t)).collect() took 83,ms
+interesting_word_freq(&terms[..], &interesting_words[..]) took 347,ms
+symbol_counts(&posts[..]) took 18,ms
+check_for_code(&posts[..]) took 11,ms
+convert_author_to_popularity(&authors[..], &rust_authors[..]) took 3,ms
+hit: 249
+miss: 0

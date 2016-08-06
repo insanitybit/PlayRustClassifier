@@ -5,8 +5,7 @@ extern crate tiny_keccak;
 
 use clap::{Arg, App};
 use playrust_alert::reddit::RedditClient;
-use playrust_alert::reddit::{get_posts, anonymize_author};
-use tiny_keccak::Keccak;
+use playrust_alert::reddit::get_posts;
 
 fn get_args() -> String {
     let matches = App::new("Reddit Feature Generator")

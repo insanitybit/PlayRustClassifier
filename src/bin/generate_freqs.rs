@@ -1,6 +1,5 @@
 #![feature(custom_derive, plugin)]
 #![plugin(serde_macros)]
-#![feature(test)]
 
 #[macro_use(time)]
 extern crate playrust_alert;
@@ -21,20 +20,9 @@ extern crate tfidf;
 
 use clap::{Arg, App};
 use dedup_by::dedup_by;
-use rustc_serialize::json;
-use ndarray::{Axis, ArrayBase, Dimension, Array};
-
-use playrust_alert::reddit::{RawPostFeatures, ProcessedPostFeatures};
-use playrust_alert::feature_extraction::{convert_author_to_popularity, convert_is_self,
-                                         tfidf_reduce_selftext, subs_to_float, text_to_docs};
+use playrust_alert::reddit::RawPostFeatures;
 use rsml::tfidf_helper::get_unique_word_list;
-use rand::{thread_rng, Rng};
-use rsml::random_forest::model::*;
-use rsml::traits::SupervisedLearning;
 
-use rustc_serialize::Encodable;
-use std::fs::File;
-use std::io::prelude::*;
 use std::collections::BTreeMap;
 
 fn get_train_data() -> Vec<RawPostFeatures> {
