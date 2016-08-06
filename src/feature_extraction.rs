@@ -207,7 +207,26 @@ mod tests {
                           return x;
                         }"];
         let r = check_for_code(&texts[..]);
-        println!("{:?}", r);
+        assert_eq!(r[0], vec![1f64, 1f64, 1f64, 1f64]);
+    }
+
+    #[test]
+    fn test_symbol_freq() {
+        let texts = vec!["Hey I need help with this function: pub fn get_stuff1(thing: &str) -> \
+                          String {
+                          let mut x: Option<_> = {Some(\"False\")};
+
+                          if let Some(s) = match x {
+                              println!(\"{:?}\", s);
+                          }
+
+                          return x;
+                        }"];
+        let s = symbol_counts(&texts[..]);
+        assert_eq!(s[0],
+                   vec![2f64, 1f64, 3f64, 4f64, 1f64, 1f64, 0f64, 4f64, 4f64, 0f64, 0f64, 4f64,
+                        4f64, 0f64, 0f64, 0f64, 1f64, 0f64, 0f64, 0f64, 1f64, 2f64, 2f64, 0f64,
+                        0f64, 0f64]);
     }
 
     #[test]
