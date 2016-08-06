@@ -102,12 +102,20 @@ pub fn symbol_counts(self_texts: &[&str]) -> Vec<Vec<f64>> {
 
     let mut freq_matrix = Vec::with_capacity(self_texts.len());
 
+    let init_map: BTreeMap<&char, u64> = {
+        let mut init_map = BTreeMap::new();
+        for ch in symbols.iter() {
+            init_map.insert(&*ch, 0);
+        }
+        init_map
+    };
+
     for text in self_texts {
-        let mut char_map = BTreeMap::new();
+        let mut char_map = init_map.clone();
 
         for ch in text.chars() {
-            if symbols.binary_search(&ch).is_ok() {
-                *char_map.entry(ch).or_insert(0) += 1;
+            if let Some(f) = char_map.get_mut(&ch) {
+                *f += 1;
             }
         }
 
@@ -126,21 +134,26 @@ pub fn symbol_counts(self_texts: &[&str]) -> Vec<Vec<f64>> {
 pub fn interesting_word_freq(self_texts: &[&str], spec_words: &[String]) -> Vec<Vec<f64>> {
 
     let mut freq_matrix = Vec::with_capacity(self_texts.len());
-    let text_words: Vec<Vec<String>> = time!(self_texts.iter()
-                                                       .map(|t| tfidf_helper::get_words(*t))
-                                                       .collect());
+    let text_words: Vec<Vec<String>> = self_texts.iter()
+                                                 .map(|t| tfidf_helper::get_words(*t))
+                                                 .collect();
 
+    let init_map: BTreeMap<String, u64> = {
+        let mut init_map = BTreeMap::new();
+        for word in spec_words {
+            init_map.insert(word.to_owned(), 0);
+        }
+        init_map
+    };
 
     for words in text_words.iter() {
-        let mut freq_map: BTreeMap<String, u64> = BTreeMap::new();
+        let mut freq_map: BTreeMap<String, u64> = init_map.clone();
 
-        for word in spec_words {
-            freq_map.insert(word.to_owned(), 0);
-        }
+
 
         for word in words {
-            if spec_words.binary_search(&word).is_ok() {
-                *freq_map.entry(word.to_owned()).or_insert(0) += 1;
+            if let Some(f) = freq_map.get_mut(&word.to_owned()) {
+                *f += 1;
             }
         }
 

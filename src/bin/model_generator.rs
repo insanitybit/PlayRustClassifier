@@ -51,6 +51,7 @@ fn get_train_data() -> Vec<RawPostFeatures> {
                                          .map(|raw_post| raw_post.unwrap())
                                          .collect();
 
+    println!("{:?}", posts.len());
     let mut posts: Vec<RawPostFeatures> = posts.into_iter()
                                                .filter(|raw_post| raw_post.selftext.len() > 8)
                                                .collect();
@@ -74,12 +75,12 @@ fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> (Vec<ProcessedPostF
                                                None
                                            })
                                            .collect();
-    let posts: Vec<&str> = raw_posts.iter().map(|r| r.selftext.as_ref()).collect();
-    let post_lens: Vec<f64> = raw_posts.iter().map(|r| r.selftext.len() as f64).collect();
+    let posts: Vec<&str> = time!(raw_posts.iter().map(|r| r.selftext.as_ref()).collect());
+    let post_lens: Vec<f64> = time!(raw_posts.iter().map(|r| r.selftext.len() as f64).collect());
 
-    let titles: Vec<&str> = raw_posts.iter().map(|r| r.title.as_ref()).collect();
-    let subreddits: Vec<_> = raw_posts.iter().map(|r| r.subreddit.as_ref()).collect();
-    let sub_floats = subs_to_float(&subreddits[..]);
+    let titles: Vec<&str> = time!(raw_posts.iter().map(|r| r.title.as_ref()).collect());
+    let subreddits: Vec<_> = time!(raw_posts.iter().map(|r| r.subreddit.as_ref()).collect());
+    let sub_floats = time!(subs_to_float(&subreddits[..]));
 
     let interesting_words = load_list("./static_data/words_of_interest");
 
@@ -95,11 +96,11 @@ fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> (Vec<ProcessedPostF
 
     let terms: Vec<&str> = terms.iter().map(|s| s.as_str()).collect();
 
-    let term_frequencies = interesting_word_freq(&terms[..], &interesting_words[..]);
-    let symbol_frequences = symbol_counts(&posts[..]);
-    let rust_regexes = check_for_code(&posts[..]);
+    let term_frequencies = time!(interesting_word_freq(&terms[..], &interesting_words[..]));
+    let symbol_frequences = time!(symbol_counts(&posts[..]));
+    let rust_regexes = time!(check_for_code(&posts[..]));
 
-    let author_popularity = convert_author_to_popularity(&authors[..], &rust_authors[..]);
+    let author_popularity = time!(convert_author_to_popularity(&authors[..], &rust_authors[..]));
 
     authors.sort();
     write_list(&rust_authors[..], "./data/rust_author_list");
@@ -164,7 +165,6 @@ fn construct_matrix(post_features: &[ProcessedPostFeatures]) -> ArrayBase<Vec<f6
 fn main() {
     // Deserialize raw reddit post features from an input file, deduplicate by the title, and
     // then shuffle them.
-
     let posts: Vec<_> = {
         let mut posts = get_train_data();
         let mut rng = thread_rng();

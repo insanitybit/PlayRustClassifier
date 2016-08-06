@@ -29,7 +29,7 @@ print(test_df.shape)
 print(test_truth_df.shape)
 
 
-rfc = RandomForestClassifier(n_estimators=20, random_state=42)
+rfc = RandomForestClassifier(n_estimators=5)
 start = current_milli_time()
 rfc.fit(train_df, train_truth_df)
 end = current_milli_time()
@@ -44,6 +44,8 @@ pred = rfc.predict(test_df)
 score = rfc.score(test_df, test_truth_df)
 
 for index in range(0, len(test_truth_df)):
-    print("{} {} {}".format(prob[index], pred[index], test_truth_df[index]))
+    if pred[index] != test_truth_df[index]:
+        print(index)
+        print("{} {} {}".format(prob[index], pred[index], test_truth_df[index]))
 
 print(score)
