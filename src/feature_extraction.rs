@@ -230,6 +230,15 @@ mod tests {
     }
 
     #[test]
+    fn test_author_popularity() {
+        let authors = vec!["steveklabnik", "staticassert", "illogiq", "illogiq"];
+        let popularity = vec![1f64, 1f64, 2f64, 2f64];
+
+        assert_eq!(convert_author_to_popularity(&authors[..], &authors[..]),
+                   popularity);
+    }
+
+    #[test]
     fn test_word_freq() {
         let texts = vec!["the lazy brown fox jumped quickly = over the lazy fence"];
         let interesting_words = vec!["fence".to_owned(),
