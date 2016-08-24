@@ -2,8 +2,11 @@ use rayon::prelude::*;
 use regex::Regex;
 // use rsml::tfidf_helper::*;
 // use tfidf::{TfIdf, TfIdfDefault};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::ascii::AsciiExt;
+
+use std::hash::BuildHasherDefault;
+use fnv::FnvHasher;
 
 pub fn convert_is_self(b: bool) -> f32 {
     if b {
@@ -16,12 +19,21 @@ pub fn convert_is_self(b: bool) -> f32 {
 pub fn convert_author_to_popularity<T: AsRef<str>>(authors: &[T],
                                                    rust_authors: &[&str])
                                                    -> Vec<f32> {
-    let mut auth_count: BTreeMap<&str, _> = BTreeMap::new();
+
+    let fnv = BuildHasherDefault::<FnvHasher>::default();
+    let mut auth_count = HashMap::with_hasher(fnv);
+
+    for author in rust_authors {
+        auth_count.insert(author.as_ref(), 0);
+    }
 
     for author in authors {
-        if rust_authors.contains(&author.as_ref()) {
-            *auth_count.entry(author.as_ref()).or_insert(0) += 1;
+        if let Some(f) = auth_count.get_mut(&author.as_ref()) {
+            *f += 1;
         }
+        // if rust_authors.contains(&author.as_ref()) {
+        //     *auth_count.entry(author.as_ref()).or_insert(0) += 1;
+        // }
     }
     let mut freqs = Vec::with_capacity(authors.len());
 
@@ -227,19 +239,24 @@ pub fn interesting_word_freq(self_texts: &[&str], spec_words: &[String]) -> Vec<
                                                  .map(|t| get_words(*t))
                                                  .collect();
 
-    let init_map: BTreeMap<String, u64> = {
-        let mut init_map = BTreeMap::new();
+
+
+    let init_map = {
+
+        let fnv = BuildHasherDefault::<FnvHasher>::default();
+        let mut init_map = HashMap::with_capacity_and_hasher(spec_words.len(), fnv);
+
         for word in spec_words {
-            init_map.insert(word.to_owned(), 0);
+            init_map.insert(word, 0);
         }
         init_map
     };
 
     for words in text_words.iter() {
-        let mut freq_map: BTreeMap<String, u64> = init_map.clone();
+        let mut freq_map = init_map.clone();
 
         for word in words {
-            if let Some(f) = freq_map.get_mut(&word.to_owned()) {
+            if let Some(f) = freq_map.get_mut(word) {
                 *f += 1;
             }
         }
@@ -334,7 +351,7 @@ mod tests {
                                      "orange".to_owned(),
                                      "quickly".to_owned()];
 
-        let expected = vec![1f32, 0f32, 2f32, 0f32, 1f32];
+        let expected = vec![1f32, 2f32, 0f32, 1f32, 0f32];
 
         let frequencies = interesting_word_freq(&texts[..], &interesting_words[..]);
 

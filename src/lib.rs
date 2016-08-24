@@ -44,6 +44,7 @@ extern crate serde_json;
 extern crate stopwatch;
 extern crate tiny_keccak;
 extern crate tfidf;
+extern crate fnv;
 
 pub mod feature_extraction;
 pub mod reddit;
