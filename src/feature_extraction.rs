@@ -8,6 +8,9 @@ use std::ascii::AsciiExt;
 use std::hash::BuildHasherDefault;
 use fnv::FnvHasher;
 
+
+use util::*;
+
 pub fn convert_is_self(b: bool) -> f32 {
     if b {
         0f32
@@ -31,9 +34,6 @@ pub fn convert_author_to_popularity<T: AsRef<str>>(authors: &[T],
         if let Some(f) = auth_count.get_mut(&author.as_ref()) {
             *f += 1;
         }
-        // if rust_authors.contains(&author.as_ref()) {
-        //     *auth_count.entry(author.as_ref()).or_insert(0) += 1;
-        // }
     }
     let mut freqs = Vec::with_capacity(authors.len());
 
@@ -240,6 +240,8 @@ pub fn interesting_word_freq(self_texts: &[&str], spec_words: &[String]) -> Vec<
                                                  .collect();
 
 
+
+    write_csv_vec(&text_words[..], "./data/text_words");
 
     let init_map = {
 

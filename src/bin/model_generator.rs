@@ -65,12 +65,14 @@ fn get_train_data() -> Vec<RawPostFeatures> {
 }
 
 
-fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> (Vec<ProcessedPostFeatures>, Vec<f32>) {
+fn extract_post_features(raw_posts: &[RawPostFeatures]) -> (Vec<ProcessedPostFeatures>, Array) {
     let selfs: Vec<_> = raw_posts.iter().map(|r| convert_is_self(r.is_self)).collect();
     let downs: Vec<_> = raw_posts.iter().map(|r| r.downs as f32).collect();
     let ups: Vec<_> = raw_posts.iter().map(|r| r.ups as f32).collect();
     let scores: Vec<_> = raw_posts.iter().map(|r| r.score as f32).collect();
     let mut authors: Vec<&str> = raw_posts.iter().map(|r| r.author.as_ref()).collect();
+
+    write_list(&authors[..], "./data/all_authors");
     let rust_authors: Vec<&str> = raw_posts.iter()
                                            .filter_map(|r| if r.subreddit == "rust" {
                                                Some(r.author.as_ref())
@@ -125,7 +127,7 @@ fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> (Vec<ProcessedPostF
         processed.push(p);
     }
 
-    (processed, sub_floats)
+    (processed, Array::from(sub_floats))
 }
 
 fn construct_matrix(post_features: &[ProcessedPostFeatures]) -> Array {
@@ -185,13 +187,11 @@ fn main() {
     //
     // posts.truncate(100_000);
     // Generate our processed feature matrix
-    let (features, ground_truth) = time!(normalize_post_features(&posts[..]));
-    return;
-    let feat_matrix = construct_matrix(&features[..]);
-    println!("{:?} {}", feat_matrix.rows(), feat_matrix.cols());
-    let ground_truth = Array::from(ground_truth);
-    // println!("{:?} {:?}", feat_matrix.rows(), feat_matrix.cols());
+    let (features, ground_truth) = extract_post_features(&posts[..]);
+    let feat_matrix: Array = construct_matrix(&features[..]);
+
     let mut tree_params = decision_tree::Hyperparameters::new(feat_matrix.cols());
+
     tree_params.min_samples_split(10)
                .max_features(5)
                .rng(StdRng::from_seed(&[100]));
@@ -200,17 +200,18 @@ fn main() {
                         .rng(StdRng::from_seed(&[100]))
                         .one_vs_rest();
 
+    model.fit_parallel(&feat_matrix, &ground_truth, 8).unwrap();
+    serialize_to_file(&model, "./models/rustlearnrf");
+
     println!("training model");
 
     // write_csv(&feat_matrix, "./features");
     // write_csv(&ground_truth, "./truth");
 
     // time!(model.fit(&feat_matrix, &ground_truth)).unwrap();
-    time!(model.fit_parallel(&feat_matrix, &ground_truth, 8)).unwrap();
+
 
     println!("serialize_to_file");
-    serialize_to_file(&model, "./models/rustlearnrf");
-
 
     let no_splits = 10;
 
@@ -223,14 +224,10 @@ fn main() {
         let x_train = feat_matrix.get_rows(&train_idx);
         let x_test = feat_matrix.get_rows(&test_idx);
 
-        println!("x_train {:?}", x_train.rows());
-
-
-        println!("x_test {:?}", x_test.rows());
         let y_train = ground_truth.get_rows(&train_idx);
-        time!(model.fit_parallel(&x_train, &y_train, 8)).unwrap();
+        model.fit_parallel(&x_train, &y_train, 8).unwrap();
 
-        let test_prediction = time!(model.predict(&x_test)).unwrap();
+        let test_prediction = model.predict(&x_test).unwrap();
 
         // println!("test_prediction {:#?}", test_prediction);
         test_accuracy += accuracy_score(&ground_truth.get_rows(&test_idx), &test_prediction);
@@ -238,32 +235,6 @@ fn main() {
     test_accuracy /= no_splits as f32;
 
     println!("Accuracy {}", test_accuracy);
-
-    // let preds = rf.predict(&sample1.to_owned()).unwrap();
-    //
-    // let mut hits = 0;
-    // let mut miss = 0;
-    // for (pred, truth) in preds.iter().zip(truth1.iter()) {
-    //     let normal_pred = {
-    //         if *pred > 0.6 {
-    //             1f32
-    //         } else {
-    //             0f32
-    //         }
-    //     };
-    //
-    //     let truth = truth.round();
-    //     // println!("{:?} {:?} {:?}", pred, normal_pred, truth);
-    //
-    //     if normal_pred == truth {
-    //         hits += 1;
-    //     } else {
-    //         miss += 1;
-    //         // println!("{:?}", pred_raw[index]);
-    //     }
-    // }
-    // println!("hit: {}\nmiss: {}", hits, miss);
-    // println!("{:?}", unique_subs);
 }
 
 #[cfg(test)]

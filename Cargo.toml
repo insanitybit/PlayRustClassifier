@@ -20,7 +20,7 @@ serde_macros = "0.8.*"
 stopwatch = "*"
 tiny-keccak = "1.0.*"
 rustlearn = "*"
-
+fnv = "*"
 [dependencies.ndarray]
 features = ["rustc-serialize"]
 version = "0.6"

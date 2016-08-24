@@ -32,6 +32,13 @@ pub fn write_ndarray<T: Dimension>(nd: ArrayBase<ViewRepr<&f64>, T>, path: &str)
     }
 }
 
+pub fn write_csv_vec<T: Encodable>(v: &[Vec<T>], path: &str) {
+    let mut wtr = Writer::from_file(path).unwrap();
+    for record in v {
+        let _ = wtr.encode(record);
+    }
+}
+
 pub fn write_csv<T: Encodable>(nd: &T, path: &str) {
     let mut wtr = Writer::from_file(path).unwrap();
     wtr.encode(nd);
