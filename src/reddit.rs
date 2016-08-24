@@ -21,23 +21,23 @@ pub struct RawPostFeatures {
 #[derive(Debug, Clone, RustcEncodable)]
 pub struct ProcessedPostFeatures {
     /// 0 if self, 1 if not self
-    pub is_self: f64,
+    pub is_self: f32,
     /// The popularity of the author relative to the dataset
-    pub author_popularity: f64,
+    pub author_popularity: f32,
     /// The number of downvotes
-    pub downs: f64,
+    pub downs: f32,
     /// The number of upvotes
-    pub ups: f64,
+    pub ups: f32,
     /// The overall score of the post
-    pub score: f64,
+    pub score: f32,
     /// Length of the postcharacters
-    pub post_len: f64,
+    pub post_len: f32,
     /// Word frequency vector
-    pub word_freq: Vec<f64>,
+    pub word_freq: Vec<f32>,
     /// symbol frequency vector
-    pub symbol_freq: Vec<f64>,
+    pub symbol_freq: Vec<f32>,
     /// Matches against regexes for rust code
-    pub regex_matches: Vec<f64>,
+    pub regex_matches: Vec<f32>,
 }
 
 pub struct RedditClient {

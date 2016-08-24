@@ -1,6 +1,5 @@
 use ndarray::{ArrayBase, Dimension, ViewRepr};
 
-
 use rustc_serialize::{Encodable, Decodable, json};
 
 use std::fs::File;
@@ -31,6 +30,14 @@ pub fn write_ndarray<T: Dimension>(nd: ArrayBase<ViewRepr<&f64>, T>, path: &str)
     for record in nd.inner_iter() {
         let _ = wtr.encode(record);
     }
+}
+
+pub fn write_csv<T: Encodable>(nd: &T, path: &str) {
+    let mut wtr = Writer::from_file(path).unwrap();
+    wtr.encode(nd);
+    // for record in nd.inner_iter() {
+    //     let _ = wtr.encode(record);
+    // }
 }
 
 pub fn load_json<T: Decodable>(path: &str) -> T {

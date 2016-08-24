@@ -38,7 +38,7 @@ extern crate serde;
 extern crate hyper;
 extern crate rayon;
 extern crate regex;
-extern crate rsml;
+extern crate rustlearn;
 extern crate rustc_serialize;
 extern crate serde_json;
 extern crate stopwatch;

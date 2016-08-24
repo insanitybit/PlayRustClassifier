@@ -5,22 +5,21 @@
 #[macro_use(time)]
 extern crate playrust_alert;
 
-#[macro_use(stack)]
-extern crate ndarray;
-
 extern crate clap;
 extern crate csv;
 extern crate dedup_by;
 extern crate rand;
 extern crate rayon;
-extern crate rsml;
+extern crate rustlearn;
 extern crate rustc_serialize;
 extern crate serde_json;
 extern crate stopwatch;
 
 use clap::{Arg, App};
+
+use rustlearn::cross_validation::cross_validation::CrossValidation;
+
 use dedup_by::dedup_by;
-use ndarray::{Axis, ArrayBase, Array};
 
 use playrust_alert::reddit::{RawPostFeatures, ProcessedPostFeatures};
 use playrust_alert::feature_extraction::{convert_author_to_popularity, convert_is_self,
@@ -29,9 +28,13 @@ use playrust_alert::feature_extraction::{convert_author_to_popularity, convert_i
 
 use playrust_alert::util::*;
 
-use rand::{thread_rng, Rng};
-use rsml::random_forest::model::*;
-use rsml::traits::SupervisedLearning;
+use rustlearn::prelude::*;
+use rustlearn::trees::decision_tree;
+use rustlearn::ensemble::random_forest::Hyperparameters;
+use rustlearn::metrics::accuracy_score;
+
+use rand::{thread_rng, Rng, StdRng, SeedableRng};
+
 
 fn get_train_data() -> Vec<RawPostFeatures> {
     let matches = App::new("Model Generator")
@@ -51,22 +54,22 @@ fn get_train_data() -> Vec<RawPostFeatures> {
                                          .map(|raw_post| raw_post.unwrap())
                                          .collect();
 
-    println!("{:?}", posts.len());
+
     let mut posts: Vec<RawPostFeatures> = posts.into_iter()
                                                .filter(|raw_post| raw_post.selftext.len() > 8)
                                                .collect();
-    println!("{:?}", posts.len());
+
     posts.sort_by(|a, b| a.title.cmp(&b.title));
     dedup_by(&mut posts, |a, b| a.title == b.title);
     posts
 }
 
 
-fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> (Vec<ProcessedPostFeatures>, Vec<f64>) {
+fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> (Vec<ProcessedPostFeatures>, Vec<f32>) {
     let selfs: Vec<_> = raw_posts.iter().map(|r| convert_is_self(r.is_self)).collect();
-    let downs: Vec<_> = raw_posts.iter().map(|r| r.downs as f64).collect();
-    let ups: Vec<_> = raw_posts.iter().map(|r| r.ups as f64).collect();
-    let scores: Vec<_> = raw_posts.iter().map(|r| r.score as f64).collect();
+    let downs: Vec<_> = raw_posts.iter().map(|r| r.downs as f32).collect();
+    let ups: Vec<_> = raw_posts.iter().map(|r| r.ups as f32).collect();
+    let scores: Vec<_> = raw_posts.iter().map(|r| r.score as f32).collect();
     let mut authors: Vec<&str> = raw_posts.iter().map(|r| r.author.as_ref()).collect();
     let rust_authors: Vec<&str> = raw_posts.iter()
                                            .filter_map(|r| if r.subreddit == "rust" {
@@ -75,12 +78,12 @@ fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> (Vec<ProcessedPostF
                                                None
                                            })
                                            .collect();
-    let posts: Vec<&str> = time!(raw_posts.iter().map(|r| r.selftext.as_ref()).collect());
-    let post_lens: Vec<f64> = time!(raw_posts.iter().map(|r| r.selftext.len() as f64).collect());
+    let posts: Vec<&str> = raw_posts.iter().map(|r| r.selftext.as_ref()).collect();
+    let post_lens: Vec<f32> = raw_posts.iter().map(|r| r.selftext.len() as f32).collect();
 
-    let titles: Vec<&str> = time!(raw_posts.iter().map(|r| r.title.as_ref()).collect());
-    let subreddits: Vec<_> = time!(raw_posts.iter().map(|r| r.subreddit.as_ref()).collect());
-    let sub_floats = time!(subs_to_float(&subreddits[..]));
+    let titles: Vec<&str> = raw_posts.iter().map(|r| r.title.as_ref()).collect();
+    let subreddits: Vec<_> = raw_posts.iter().map(|r| r.subreddit.as_ref()).collect();
+    let sub_floats = subs_to_float(&subreddits[..]);
 
     let interesting_words = load_list("./static_data/words_of_interest");
 
@@ -125,97 +128,141 @@ fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> (Vec<ProcessedPostF
     (processed, sub_floats)
 }
 
-fn construct_matrix(post_features: &[ProcessedPostFeatures]) -> ArrayBase<Vec<f64>, (usize, usize)> {
+fn construct_matrix(post_features: &[ProcessedPostFeatures]) -> Array {
     let auth_pop: Vec<_> = post_features.iter().map(|p| p.author_popularity).collect();
     let downs: Vec<_> = post_features.iter().map(|p| p.downs).collect();
     let ups: Vec<_> = post_features.iter().map(|p| p.ups).collect();
     let score: Vec<_> = post_features.iter().map(|p| p.score).collect();
     let post_lens: Vec<_> = post_features.iter().map(|p| p.post_len).collect();
 
-    let term_count = post_features.iter().last().unwrap().word_freq.iter().count();
-    let term_count = term_count + post_features.iter().last().unwrap().symbol_freq.iter().count();
-    let term_count = term_count + post_features.iter().last().unwrap().regex_matches.iter().count();
+    let feature_count = post_features.iter().last().unwrap().word_freq.iter().count();
+    let feature_count = feature_count +
+                        post_features.iter().last().unwrap().symbol_freq.iter().count();
+    let feature_count = feature_count +
+                        post_features.iter().last().unwrap().regex_matches.iter().count();
 
     let term_frequencies: Vec<_> = post_features.iter().map(|p| &p.word_freq[..]).collect();
     let symbol_frequencies: Vec<_> = post_features.iter().map(|p| &p.symbol_freq[..]).collect();
     let regex_matches: Vec<_> = post_features.iter().map(|p| &p.regex_matches[..]).collect();
 
-    let mut row = vec![auth_pop[0], downs[0], ups[0], score[0], post_lens[0]];
-    let term_count = term_count + row.len();
+    let feature_count = feature_count + 5;
 
-    row.extend_from_slice(term_frequencies[0]);
-    row.extend_from_slice(symbol_frequencies[0]);
-    row.extend_from_slice(regex_matches[0]);
-    let mut a = stack!(Axis(0), row);
+    let mut features = Vec::with_capacity(feature_count * post_features.len());
 
-    for index in 1..post_features.len() {
-        let mut row = vec![auth_pop[index],
-                           downs[index],
-                           ups[index],
-                           score[index],
-                           post_lens[index]];
-        row.extend_from_slice(term_frequencies[index]);
-        row.extend_from_slice(symbol_frequencies[index]);
-        row.extend_from_slice(regex_matches[index]);
-        a = stack!(Axis(0), a, row);
+    for index in 0..post_features.len() {
+        let row = vec![auth_pop[index], downs[index], ups[index], score[index], post_lens[index]];
+        features.extend_from_slice(&row[..]);
+        features.extend_from_slice(term_frequencies[index]);
+        features.extend_from_slice(symbol_frequencies[index]);
+        features.extend_from_slice(regex_matches[index]);
     }
-    a.into_shape((post_features.len(), term_count)).unwrap()
+
+    let mut features = Array::from(features);
+    features.reshape(post_features.len(), feature_count);
+    features
 }
 
 fn main() {
     // Deserialize raw reddit post features from an input file, deduplicate by the title, and
     // then shuffle them.
-    let posts: Vec<_> = {
+    let mut posts: Vec<_> = {
         let mut posts = get_train_data();
         let mut rng = thread_rng();
         rng.shuffle(&mut posts);
         // posts.into_iter().take(500).collect()
         posts
     };
-
+    // posts.reserve(100_000);
+    // loop {
+    //     if posts.len() >= 100_000 {
+    //         break;
+    //     }
+    //     let mut rng = thread_rng();
+    //     rng.shuffle(&mut posts);
+    //     let posts_c = posts.clone();
+    //     posts.extend_from_slice(&posts_c[..]);
+    // }
+    //
+    // posts.truncate(100_000);
     // Generate our processed feature matrix
-    let (features, ground_truth) = normalize_post_features(&posts[..]);
+    let (features, ground_truth) = time!(normalize_post_features(&posts[..]));
+    return;
     let feat_matrix = construct_matrix(&features[..]);
+    println!("{:?} {}", feat_matrix.rows(), feat_matrix.cols());
+    let ground_truth = Array::from(ground_truth);
+    // println!("{:?} {:?}", feat_matrix.rows(), feat_matrix.cols());
+    let mut tree_params = decision_tree::Hyperparameters::new(feat_matrix.cols());
+    tree_params.min_samples_split(10)
+               .max_features(5)
+               .rng(StdRng::from_seed(&[100]));
 
-    // Split our data such that we train on one set and can test our accuracy on another
-    let ground_truth = Array::from_vec(ground_truth);
+    let mut model = Hyperparameters::new(tree_params, 10)
+                        .rng(StdRng::from_seed(&[100]))
+                        .one_vs_rest();
 
-    let (truth1, truth2) = ground_truth.view().split_at(Axis(0), posts.len() / 9);
-    let (sample1, sample2) = feat_matrix.view().split_at(Axis(0), posts.len() / 9);
-    write_ndarray(truth1, "truth1");
-    write_ndarray(truth2, "truth2");
-    write_ndarray(sample1, "sample1");
-    write_ndarray(sample2, "sample2");
+    println!("training model");
 
-    let mut rf = RandomForest::new(1);
-    rf.fit(&sample2.to_owned(), &truth2.to_owned());
+    // write_csv(&feat_matrix, "./features");
+    // write_csv(&ground_truth, "./truth");
 
-    serialize_to_file(&rf, "./models/rf");
+    // time!(model.fit(&feat_matrix, &ground_truth)).unwrap();
+    time!(model.fit_parallel(&feat_matrix, &ground_truth, 8)).unwrap();
 
-    let preds = rf.predict(&sample1.to_owned()).unwrap();
+    println!("serialize_to_file");
+    serialize_to_file(&model, "./models/rustlearnrf");
 
-    let mut hits = 0;
-    let mut miss = 0;
-    for (pred, truth) in preds.iter().zip(truth1.iter()) {
-        let normal_pred = {
-            if *pred > 0.6 {
-                1f64
-            } else {
-                0f64
-            }
-        };
 
-        let truth = truth.round();
-        // println!("{:?} {:?} {:?}", pred, normal_pred, truth);
+    let no_splits = 10;
 
-        if normal_pred == truth {
-            hits += 1;
-        } else {
-            miss += 1;
-            // println!("{:?}", pred_raw[index]);
-        }
+    let mut cv = CrossValidation::new(feat_matrix.rows(), no_splits);
+    cv.set_rng(StdRng::from_seed(&[100]));
+
+    let mut test_accuracy = 0.0;
+    for (train_idx, test_idx) in cv {
+
+        let x_train = feat_matrix.get_rows(&train_idx);
+        let x_test = feat_matrix.get_rows(&test_idx);
+
+        println!("x_train {:?}", x_train.rows());
+
+
+        println!("x_test {:?}", x_test.rows());
+        let y_train = ground_truth.get_rows(&train_idx);
+        time!(model.fit_parallel(&x_train, &y_train, 8)).unwrap();
+
+        let test_prediction = time!(model.predict(&x_test)).unwrap();
+
+        // println!("test_prediction {:#?}", test_prediction);
+        test_accuracy += accuracy_score(&ground_truth.get_rows(&test_idx), &test_prediction);
     }
-    println!("hit: {}\nmiss: {}", hits, miss);
+    test_accuracy /= no_splits as f32;
+
+    println!("Accuracy {}", test_accuracy);
+
+    // let preds = rf.predict(&sample1.to_owned()).unwrap();
+    //
+    // let mut hits = 0;
+    // let mut miss = 0;
+    // for (pred, truth) in preds.iter().zip(truth1.iter()) {
+    //     let normal_pred = {
+    //         if *pred > 0.6 {
+    //             1f32
+    //         } else {
+    //             0f32
+    //         }
+    //     };
+    //
+    //     let truth = truth.round();
+    //     // println!("{:?} {:?} {:?}", pred, normal_pred, truth);
+    //
+    //     if normal_pred == truth {
+    //         hits += 1;
+    //     } else {
+    //         miss += 1;
+    //         // println!("{:?}", pred_raw[index]);
+    //     }
+    // }
+    // println!("hit: {}\nmiss: {}", hits, miss);
     // println!("{:?}", unique_subs);
 }
 
@@ -226,7 +273,7 @@ mod tests {
     #[test]
     fn test_subs_to_float() {
         let subs = vec!["a", "b", "c", "c", "b", "d", "a"];
-        assert_eq!(vec![0f64, 1f64, 2f64, 2f64, 1f64, 3f64, 0f64],
+        assert_eq!(vec![0f32, 1f32, 2f32, 2f32, 1f32, 3f32, 0f32],
                    subs_to_float(&subs[..]))
     }
 }
