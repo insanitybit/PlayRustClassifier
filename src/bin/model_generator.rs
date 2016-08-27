@@ -105,7 +105,7 @@ fn extract_post_features(raw_posts: &[RawPostFeatures]) -> (Vec<ProcessedPostFea
     let symbol_frequences = time!(symbol_counts(&posts[..]));
     let rust_regexes = time!(check_for_code(&posts[..]));
 
-    let author_popularity = time!(convert_author_to_popularity(&authors[..], &rust_authors[..]));
+    let author_popularity = convert_author_to_popularity(&authors[..], &rust_authors[..]);
 
     authors.sort();
     write_list(&rust_authors[..], "./data/rust_author_list");
@@ -174,27 +174,11 @@ fn main() {
         // posts.into_iter().take(500).collect()
         posts
     };
-    // posts.reserve(100_000);
-    // loop {
-    //     if posts.len() >= 100_000 {
-    //         break;
-    //     }
-    //     let mut rng = thread_rng();
-    //     rng.shuffle(&mut posts);
-    //     let posts_c = posts.clone();
-    //     posts.extend_from_slice(&posts_c[..]);
-    // }
-    //
-    // posts.truncate(100_000);
-    // Generate our processed feature matrix
+
     let (features, ground_truth) = extract_post_features(&posts[..]);
     let feat_matrix: Array = construct_matrix(&features[..]);
 
-    let mut tree_params = decision_tree::Hyperparameters::new(feat_matrix.cols());
-
-    tree_params.min_samples_split(10)
-               .max_features(5)
-               .rng(StdRng::from_seed(&[100]));
+    let tree_params = decision_tree::Hyperparameters::new(feat_matrix.cols());
 
     let mut model = Hyperparameters::new(tree_params, 10)
                         .rng(StdRng::from_seed(&[100]))
@@ -202,16 +186,6 @@ fn main() {
 
     model.fit_parallel(&feat_matrix, &ground_truth, 8).unwrap();
     serialize_to_file(&model, "./models/rustlearnrf");
-
-    println!("training model");
-
-    // write_csv(&feat_matrix, "./features");
-    // write_csv(&ground_truth, "./truth");
-
-    // time!(model.fit(&feat_matrix, &ground_truth)).unwrap();
-
-
-    println!("serialize_to_file");
 
     let no_splits = 10;
 
@@ -226,7 +200,6 @@ fn main() {
 
         let y_train = ground_truth.get_rows(&train_idx);
         model.fit_parallel(&x_train, &y_train, 8).unwrap();
-
         let test_prediction = model.predict(&x_test).unwrap();
 
         // println!("test_prediction {:#?}", test_prediction);

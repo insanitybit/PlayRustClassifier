@@ -150,14 +150,12 @@ fn main() {
 
     let rf: RandomForest = load_json("./models/rustlearnrf");
 
-    // let mut reddit_client = RedditClient::new();
-    // let raw = reddit_client.get_raw_features_from_url("https://www.reddit.com/r/rust/comments/4tz6e5/are_aliased_mutable_raw_pointers_ub");
-    // let raw_posts = get_posts(raw);
+    let mut reddit_client = RedditClient::new();
+    let raw = reddit_client.get_raw_features_from_url("https://www.reddit.com/r/rust/comments/4tz6e5/are_aliased_mutable_raw_pointers_ub");
+    let raw_posts = get_posts(raw);
     //
-    // let (features, _) = time!(normalize_post_features(&raw_posts[..]));
-    // let feat_matrix = time!(construct_matrix(&features[..]));
-    //
-    //
-    // println!("{:?}", time!(rf.predict(&feat_matrix).unwrap()));
+    let (features, _) = time!(normalize_post_features(&raw_posts[..]));
+    let feat_matrix = time!(construct_matrix(&features[..]));
+    println!("{:?}", time!(rf.predict(&feat_matrix).unwrap()));
 
 }

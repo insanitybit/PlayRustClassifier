@@ -1,4 +1,3 @@
-use rayon::prelude::*;
 use regex::Regex;
 // use rsml::tfidf_helper::*;
 // use tfidf::{TfIdf, TfIdfDefault};
@@ -19,29 +18,23 @@ pub fn convert_is_self(b: bool) -> f32 {
     }
 }
 
-pub fn convert_author_to_popularity<T: AsRef<str>>(authors: &[T],
-                                                   rust_authors: &[&str])
-                                                   -> Vec<f32> {
+pub fn convert_author_to_popularity(authors: &[&str], rust_authors: &[&str]) -> Vec<f32> {
 
     let fnv = BuildHasherDefault::<FnvHasher>::default();
-    let mut auth_count = HashMap::with_hasher(fnv);
+    let mut auth_count = HashMap::with_capacity_and_hasher(authors.len() + rust_authors.len(), fnv);
 
     for author in rust_authors {
-        auth_count.insert(author.as_ref(), 0);
+        auth_count.insert(author, 0f32);
     }
 
     for author in authors {
-        if let Some(f) = auth_count.get_mut(&author.as_ref()) {
-            *f += 1;
+        if let Some(f) = auth_count.get_mut(author) {
+            *f += 1f32;
         }
     }
-    let mut freqs = Vec::with_capacity(authors.len());
-
-    for author in authors {
-        let author_freq = *auth_count.get(author.as_ref()).unwrap_or(&0);
-        freqs.push(author_freq as f32);
-    }
-    freqs
+    authors.iter()
+           .map(|author| *auth_count.get(author).unwrap_or(&0f32))
+           .collect()
 }
 
 // pub fn text_to_docs<T: AsRef<str>>(texts: &[&str]) -> Vec<Vec<(String, usize)>> {
@@ -165,10 +158,10 @@ pub fn symbol_counts(self_texts: &[&str]) -> Vec<Vec<f32>> {
 
     let mut freq_matrix = Vec::with_capacity(self_texts.len());
 
-    let init_map: BTreeMap<&char, u64> = {
+    let init_map: BTreeMap<&char, f32> = {
         let mut init_map = BTreeMap::new();
         for ch in symbols.iter() {
-            init_map.insert(&*ch, 0);
+            init_map.insert(&*ch, 0.0);
         }
         init_map
     };
@@ -178,15 +171,15 @@ pub fn symbol_counts(self_texts: &[&str]) -> Vec<Vec<f32>> {
 
         for ch in text.chars() {
             if let Some(f) = char_map.get_mut(&ch) {
-                *f += 1;
+                *f += 1.0;
             }
         }
 
         let mut freq_vec = Vec::with_capacity(symbols.len());
 
         for symbol in symbols.iter() {
-            let symbol_count = *char_map.get(symbol).unwrap_or(&0);
-            freq_vec.push(symbol_count as f32);
+            let symbol_count = *char_map.get(symbol).unwrap_or(&0f32);
+            freq_vec.push(symbol_count);
         }
 
         freq_matrix.push(freq_vec);
@@ -196,9 +189,6 @@ pub fn symbol_counts(self_texts: &[&str]) -> Vec<Vec<f32>> {
 
 
 pub fn get_words(sentence: &str) -> Vec<String> {
-    // This whole function could easily be optimized by turning the sentence into a Vec<u8>.
-    // We can, fo rour purposes, simply strip out all non-ascii characters, and then do in-place
-    // replacements. This would incur only a single copy for the function..
     let cleaned = sentence;
 
     let cleaned: String = cleaned.chars()
@@ -249,7 +239,7 @@ pub fn interesting_word_freq(self_texts: &[&str], spec_words: &[String]) -> Vec<
         let mut init_map = HashMap::with_capacity_and_hasher(spec_words.len(), fnv);
 
         for word in spec_words {
-            init_map.insert(word, 0);
+            init_map.insert(word, 0.0);
         }
         init_map
     };
@@ -259,14 +249,14 @@ pub fn interesting_word_freq(self_texts: &[&str], spec_words: &[String]) -> Vec<
 
         for word in words {
             if let Some(f) = freq_map.get_mut(word) {
-                *f += 1;
+                *f += 1.0;
             }
         }
 
         let freq_vec: Vec<_> = freq_map.into_iter()
-                                       .collect::<Vec<(_, u64)>>()
+                                       .collect::<Vec<(_, f32)>>()
                                        .iter()
-                                       .map(|t| t.1 as f32)
+                                       .map(|t| t.1)
                                        .collect();
 
         freq_matrix.push(freq_vec);
@@ -278,20 +268,17 @@ pub fn interesting_word_freq(self_texts: &[&str], spec_words: &[String]) -> Vec<
 pub fn subs_to_float(subs: &[&str]) -> Vec<f32> {
     let mut sub_float_map = BTreeMap::new();
     let mut sub_floats = Vec::with_capacity(subs.len());
-    let mut cur_sub = 0;
+    let mut cur_sub = 0.0;
 
     for sub in subs {
         let f = *sub_float_map.entry(sub).or_insert_with(|| {
             let c = cur_sub;
-            cur_sub = c + 1;
+            cur_sub = c + 1.0;
             c
         });
         sub_floats.push(f);
     }
-    let sub_floats = sub_floats.into_iter()
-                               .map(|f| f as f32)
-                               .collect();
-    // println!("{:?}", sub_floats);
+
     sub_floats
 }
 
