@@ -14,7 +14,7 @@ use playrust_alert::reddit::{RawPostFeatures, ProcessedPostFeatures, get_posts, 
 use playrust_alert::feature_extraction::{convert_author_to_popularity, convert_is_self,
                                          subs_to_float, symbol_counts, interesting_word_freq,
                                          check_for_code};
-use playrust_alert::util::{load_list, load_json};
+use playrust_alert::util::{load_list, deserialize_from_file};
 
 use rustlearn::prelude::*;
 use rustlearn::ensemble::random_forest::RandomForest;
@@ -148,7 +148,7 @@ fn get_pred_data() -> Vec<RawPostFeatures> {
 
 fn main() {
 
-    let rf: RandomForest = load_json("./models/rustlearnrf");
+    let rf: RandomForest = deserialize_from_file("./models/rustlearnrf");
 
     let mut reddit_client = RedditClient::new();
     let raw = reddit_client.get_raw_features_from_url("https://www.reddit.com/r/rust/comments/4tz6e5/are_aliased_mutable_raw_pointers_ub");

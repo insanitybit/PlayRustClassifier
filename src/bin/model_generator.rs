@@ -105,7 +105,7 @@ fn extract_post_features(raw_posts: &[RawPostFeatures]) -> (Vec<ProcessedPostFea
     let symbol_frequences = time!(symbol_counts(&posts[..]));
     let rust_regexes = time!(check_for_code(&posts[..]));
 
-    let author_popularity = convert_author_to_popularity(&authors[..], &rust_authors[..]);
+    let author_popularity = time!(convert_author_to_popularity(&authors[..], &rust_authors[..]));
 
     authors.sort();
     write_list(&rust_authors[..], "./data/rust_author_list");
@@ -171,7 +171,7 @@ fn main() {
         let mut posts = get_train_data();
         let mut rng = thread_rng();
         rng.shuffle(&mut posts);
-        // posts.into_iter().take(500).collect()
+        // posts.into_iter().take(10).collect()
         posts
     };
 

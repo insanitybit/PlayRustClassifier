@@ -32,6 +32,7 @@ extern crate ndarray;
 #[macro_use]
 extern crate lazy_static;
 
+extern crate bincode;
 extern crate clap;
 extern crate csv;
 extern crate serde;

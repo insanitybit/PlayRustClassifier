@@ -7,9 +7,6 @@ use std::ascii::AsciiExt;
 use std::hash::BuildHasherDefault;
 use fnv::FnvHasher;
 
-
-use util::*;
-
 pub fn convert_is_self(b: bool) -> f32 {
     if b {
         0f32
@@ -110,44 +107,10 @@ fn depluralize(s: &str) -> &str {
     }
 }
 
-fn is_letter(c: char) -> bool {
-    match c as u8 {
-        97...122 => true,
-        _ => false,
-    }
-}
-
 fn should_replace(c: u8) -> bool {
     match c {
-        b'.' => true,
-        b'?' => true,
-        b'!' => true,
-        b',' => true,
-        b':' => true,
-        b';' => true,
-        b'(' => true,
-        b')' => true,
-        b'{' => true,
-        b'}' => true,
-        b']' => true,
-        b'[' => true,
-        b'/' => true,
-        b'=' => true,
-        b'|' => true,
-        b'~' => true,
-        _ => false,
-    }
-}
-
-fn should_drop(c: u8) -> bool {
-    match c {
-        b'\'' => true,
-        b'\"' => true,
-        b'`' => true,
-        b'-' => true,
-        b'_' => true,
-        b'*' => true,
-        b'&' => true,
+        97...122 => true,
+        65...90 => true,
         _ => false,
     }
 }
@@ -203,10 +166,12 @@ pub fn get_words(sentence: &str) -> Vec<String> {
         }
     }
 
-    let cleaned: Vec<_> = cleaned.into_iter()
-                                 .filter(|c| !should_drop(*c))
-                                 .collect();
 
+    // let cleaned: Vec<_> = cleaned.into_iter()
+    //                              .filter(|c| !should_drop(*c))
+    //                              .collect();
+
+    // println!("{:?}", cleaned.len());
     // We take in a &str and filter all non-ascii out, this is safe
     let cleaned = unsafe { String::from_utf8_unchecked(cleaned) };
     let cleaned = cleaned.to_lowercase();
@@ -214,8 +179,7 @@ pub fn get_words(sentence: &str) -> Vec<String> {
 
     cleaned.split_whitespace()
            .filter(|s| 2 < s.len() && s.len() < 10)
-           .filter(|s| s.chars().all(is_letter))
-           .map(depluralize)
+           .map(|s| depluralize(s))
            .filter(|s| 2 < s.len())
            .map(String::from)
            .collect()
@@ -229,10 +193,6 @@ pub fn interesting_word_freq(self_texts: &[&str], spec_words: &[String]) -> Vec<
                                                  .map(|t| get_words(*t))
                                                  .collect();
 
-
-
-    write_csv_vec(&text_words[..], "./data/text_words");
-
     let init_map = {
 
         let fnv = BuildHasherDefault::<FnvHasher>::default();
@@ -244,6 +204,8 @@ pub fn interesting_word_freq(self_texts: &[&str], spec_words: &[String]) -> Vec<
         init_map
     };
 
+
+    // time!({
     for words in text_words.iter() {
         let mut freq_map = init_map.clone();
 
@@ -253,14 +215,14 @@ pub fn interesting_word_freq(self_texts: &[&str], spec_words: &[String]) -> Vec<
             }
         }
 
-        let freq_vec: Vec<_> = freq_map.into_iter()
-                                       .collect::<Vec<(_, f32)>>()
-                                       .iter()
-                                       .map(|t| t.1)
+        let freq_vec: Vec<_> = freq_map.values()
+                                       .cloned()
                                        .collect();
 
         freq_matrix.push(freq_vec);
     }
+
+    // });
 
     freq_matrix
 }

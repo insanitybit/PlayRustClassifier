@@ -4,6 +4,7 @@ name = "playrust_alert"
 version = "0.1.0"
 
 [dependencies]
+bincode = "*"
 clap = "2.9.2"
 csv = "0.14.*"
 dedup_by = "*"

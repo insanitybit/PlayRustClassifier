@@ -1,6 +1,9 @@
 use ndarray::{ArrayBase, Dimension, ViewRepr};
 
-use rustc_serialize::{Encodable, Decodable, json};
+use rustc_serialize::{Encodable, Decodable};
+
+use bincode::SizeLimit;
+use bincode::rustc_serialize::{encode, decode};
 
 use std::fs::File;
 use std::io::prelude::*;
@@ -47,20 +50,20 @@ pub fn write_csv<T: Encodable>(nd: &T, path: &str) {
     // }
 }
 
-pub fn load_json<T: Decodable>(path: &str) -> T {
+pub fn deserialize_from_file<T: Decodable>(path: &str) -> T {
     let mut f = File::open(path).unwrap();
-    let mut json_str = String::new();
+    let mut encoded = Vec::new();
 
-    let _ = f.read_to_string(&mut json_str).unwrap();
-    json::decode(&json_str).unwrap()
+    let _ = f.read_to_end(&mut encoded).unwrap();
+    decode(&encoded[..]).unwrap()
 }
 
 pub fn serialize_to_file<T>(s: &T, path: &str)
     where T: Encodable
 {
-    let serialized = json::encode(&s).unwrap();
+    let serialized: Vec<u8> = encode(&s, SizeLimit::Infinite).unwrap();
 
     let mut f = File::create(path).unwrap();
-    write!(f, "{}", serialized).unwrap();
+    let _ = f.write_all(&serialized[..]);
     f.flush().unwrap();
 }
