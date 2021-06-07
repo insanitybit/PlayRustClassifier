@@ -8,19 +8,25 @@ extern crate csv;
 extern crate rustc_serialize;
 extern crate rustlearn;
 
-use clap::{Arg, App};
+use clap::{App, Arg};
 
-use playrust_alert::reddit::{RawPostFeatures, ProcessedPostFeatures, get_posts, RedditClient};
-use playrust_alert::feature_extraction::{convert_author_to_popularity, convert_is_self,
-                                         subs_to_float, symbol_counts, interesting_word_freq,
-                                         check_for_code};
-use playrust_alert::util::{load_list, deserialize_from_file};
+use playrust_alert::feature_extraction::{
+    check_for_code, convert_author_to_popularity, convert_is_self, interesting_word_freq,
+    subs_to_float, symbol_counts,
+};
+use playrust_alert::reddit::{get_posts, ProcessedPostFeatures, RawPostFeatures, RedditClient};
+use playrust_alert::util::{deserialize_from_file, load_list};
 
-use rustlearn::prelude::*;
 use rustlearn::ensemble::random_forest::RandomForest;
+use rustlearn::prelude::*;
 
-fn normalize_post_features(raw_posts: &[RawPostFeatures]) -> (Vec<ProcessedPostFeatures>, Vec<f32>) {
-    let selfs: Vec<_> = raw_posts.iter().map(|r| convert_is_self(r.is_self)).collect();
+fn normalize_post_features(
+    raw_posts: &[RawPostFeatures],
+) -> (Vec<ProcessedPostFeatures>, Vec<f32>) {
+    let selfs: Vec<_> = raw_posts
+        .iter()
+        .map(|r| convert_is_self(r.is_self))
+        .collect();
     let downs: Vec<_> = raw_posts.iter().map(|r| r.downs as f32).collect();
     let ups: Vec<_> = raw_posts.iter().map(|r| r.ups as f32).collect();
     let scores: Vec<_> = raw_posts.iter().map(|r| r.score as f32).collect();
@@ -80,11 +86,29 @@ fn construct_matrix(post_features: &[ProcessedPostFeatures]) -> Array {
     let score: Vec<_> = post_features.iter().map(|p| p.score).collect();
     let post_lens: Vec<_> = post_features.iter().map(|p| p.post_len).collect();
 
-    let feature_count = post_features.iter().last().unwrap().word_freq.iter().count();
-    let feature_count = feature_count +
-                        post_features.iter().last().unwrap().symbol_freq.iter().count();
-    let feature_count = feature_count +
-                        post_features.iter().last().unwrap().regex_matches.iter().count();
+    let feature_count = post_features
+        .iter()
+        .last()
+        .unwrap()
+        .word_freq
+        .iter()
+        .count();
+    let feature_count = feature_count
+        + post_features
+            .iter()
+            .last()
+            .unwrap()
+            .symbol_freq
+            .iter()
+            .count();
+    let feature_count = feature_count
+        + post_features
+            .iter()
+            .last()
+            .unwrap()
+            .regex_matches
+            .iter()
+            .count();
 
     let term_frequencies: Vec<_> = post_features.iter().map(|p| &p.word_freq[..]).collect();
     let symbol_frequencies: Vec<_> = post_features.iter().map(|p| &p.symbol_freq[..]).collect();
@@ -95,7 +119,13 @@ fn construct_matrix(post_features: &[ProcessedPostFeatures]) -> Array {
     let mut features = Vec::with_capacity(feature_count * post_features.len());
 
     for index in 0..post_features.len() {
-        let row = vec![auth_pop[index], downs[index], ups[index], score[index], post_lens[index]];
+        let row = vec![
+            auth_pop[index],
+            downs[index],
+            ups[index],
+            score[index],
+            post_lens[index],
+        ];
         features.extend_from_slice(&row[..]);
         features.extend_from_slice(term_frequencies[index]);
         features.extend_from_slice(symbol_frequencies[index]);
@@ -109,21 +139,21 @@ fn construct_matrix(post_features: &[ProcessedPostFeatures]) -> Array {
 
 fn get_pred_data() -> Vec<RawPostFeatures> {
     let matches = App::new("PlayRust Predictor")
-                      .version("1.0")
-                      .about("Given a series of reddit posts, predicts which sub they came from")
-                      .arg(Arg::with_name("pred")
-                               .help("The CSV to predict against")
-                               .required(true)
-                               .index(1))
-                      .get_matches();
+        .version("1.0")
+        .about("Given a series of reddit posts, predicts which sub they came from")
+        .arg(
+            Arg::with_name("pred")
+                .help("The CSV to predict against")
+                .required(true)
+                .index(1),
+        )
+        .get_matches();
 
     let pred_path = matches.value_of("pred").unwrap();
 
     let mut rdr = csv::Reader::from_file(pred_path).unwrap();
 
-    rdr.decode()
-       .map(|raw_post| raw_post.unwrap())
-       .collect()
+    rdr.decode().map(|raw_post| raw_post.unwrap()).collect()
 }
 
 // fn predict(r: &mut Request) -> PencilResult {
@@ -147,15 +177,15 @@ fn get_pred_data() -> Vec<RawPostFeatures> {
 // }
 
 fn main() {
-
     let rf: RandomForest = deserialize_from_file("./models/rustlearnrf");
 
     let mut reddit_client = RedditClient::new();
-    let raw = reddit_client.get_raw_features_from_url("https://www.reddit.com/r/rust/comments/4tz6e5/are_aliased_mutable_raw_pointers_ub");
+    let raw = reddit_client.get_raw_features_from_url(
+        "https://www.reddit.com/r/rust/comments/4tz6e5/are_aliased_mutable_raw_pointers_ub",
+    );
     let raw_posts = get_posts(raw);
     //
     let (features, _) = time!(normalize_post_features(&raw_posts[..]));
     let feat_matrix = time!(construct_matrix(&features[..]));
     println!("{:?}", time!(rf.predict(&feat_matrix).unwrap()));
-
 }

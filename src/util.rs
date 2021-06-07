@@ -1,9 +1,9 @@
 use ndarray::{ArrayBase, Dimension, ViewRepr};
 
-use rustc_serialize::{Encodable, Decodable};
+use rustc_serialize::{Decodable, Encodable};
 
+use bincode::rustc_serialize::{decode, encode};
 use bincode::SizeLimit;
-use bincode::rustc_serialize::{encode, decode};
 
 use std::fs::File;
 use std::io::prelude::*;
@@ -59,7 +59,8 @@ pub fn deserialize_from_file<T: Decodable>(path: &str) -> T {
 }
 
 pub fn serialize_to_file<T>(s: &T, path: &str)
-    where T: Encodable
+where
+    T: Encodable,
 {
     let serialized: Vec<u8> = encode(&s, SizeLimit::Infinite).unwrap();
 

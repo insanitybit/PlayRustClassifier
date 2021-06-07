@@ -22,6 +22,8 @@ stopwatch = "*"
 tiny-keccak = "1.0.*"
 rustlearn = "0.4.1"
 fnv = "*"
+rsml = "0.1"
+
 [dependencies.ndarray]
 features = ["rustc-serialize"]
 version = "0.6"
@@ -29,8 +31,8 @@ version = "0.6"
 # [dependencies.pencil]
 # path = "../pencil/"
 
-[dependencies.rsml]
-path = "../rsml/"
+# [dependencies.rsml]
+# path = "../rsml/"
 
 [profile.release]
 codegen-units = 1

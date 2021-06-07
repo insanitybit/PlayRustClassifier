@@ -1,26 +1,26 @@
-extern crate csv;
 extern crate clap;
+extern crate csv;
 extern crate playrust_alert;
 extern crate tiny_keccak;
 
-use clap::{Arg, App};
-use playrust_alert::reddit::RedditClient;
+use clap::{App, Arg};
 use playrust_alert::reddit::get_posts;
+use playrust_alert::reddit::RedditClient;
 
 fn get_args() -> String {
     let matches = App::new("Reddit Feature Generator")
-                      .version("1.0")
-                      .about("Collects posts from a subreddit")
-                      .arg(Arg::with_name("subreddit")
-                               .help("The subreddit to scrape")
-                               .required(true)
-                               .index(1))
-                      .get_matches();
+        .version("1.0")
+        .about("Collects posts from a subreddit")
+        .arg(
+            Arg::with_name("subreddit")
+                .help("The subreddit to scrape")
+                .required(true)
+                .index(1),
+        )
+        .get_matches();
 
     matches.value_of("subreddit").unwrap().to_owned()
 }
-
-
 
 fn main() {
     let mut client = RedditClient::new();
@@ -44,8 +44,4 @@ fn main() {
             break;
         }
     }
-
-
-
-
 }
