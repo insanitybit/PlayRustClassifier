@@ -1,19 +1,10 @@
-#![feature(custom_derive, plugin)]
-#![plugin(serde_macros)]
-
-#[macro_use(time)]
-extern crate playrust_alert;
-
-#[macro_use(stack)]
-extern crate ndarray;
-
 extern crate clap;
 extern crate csv;
 extern crate dedup_by;
 extern crate rand;
 extern crate rayon;
 extern crate rsml;
-extern crate rustc_serialize;
+// extern crate rustc_serialize;
 extern crate serde_json;
 extern crate stopwatch;
 extern crate tfidf;
@@ -21,7 +12,7 @@ extern crate tfidf;
 use clap::{App, Arg};
 use dedup_by::dedup_by;
 use playrust_alert::reddit::RawPostFeatures;
-use rsml::tfidf_helper::get_unique_word_list;
+// use rsml::tfidf_helper::get_unique_word_list;
 
 use std::collections::BTreeMap;
 
@@ -39,13 +30,23 @@ fn get_train_data() -> Vec<RawPostFeatures> {
 
     let train_path = matches.value_of("train").unwrap();
 
-    let mut rdr = csv::Reader::from_file(train_path).unwrap();
+    let rdr = csv::Reader::from_path(train_path).unwrap();
 
-    let mut posts: Vec<RawPostFeatures> = rdr.decode().map(|raw_post| raw_post.unwrap()).collect();
+    let mut posts: Vec<RawPostFeatures> = rdr.into_deserialize().map(|v| v.expect("Failed to deserialize train data for generate freqs")).collect();
 
     posts.sort_by(|a, b| a.title.cmp(&b.title));
     dedup_by(&mut posts, |a, b| a.title == b.title);
     posts
+}
+
+// normalize: Option<F>, 
+/// Replacing the missing code from rsml
+fn get_unique_words<'a>(words: &'a [&str]) -> std::collections::HashSet<&'a str> {
+    let mut set = std::collections::HashSet::new();
+    for word in words {
+        set.insert(*word);
+    }
+    set
 }
 
 fn word_freqs(posts: &[RawPostFeatures]) -> BTreeMap<String, u64> {
@@ -54,8 +55,8 @@ fn word_freqs(posts: &[RawPostFeatures]) -> BTreeMap<String, u64> {
     for post in posts {
         let post = vec![post.selftext.as_str()];
 
-        for word in get_unique_word_list(&post[..]) {
-            *map.entry(word).or_insert(0) += 1;
+        for word in get_unique_words(&post[..]) {
+            *map.entry(word.to_string()).or_insert(0) += 1;
         }
     }
     map
@@ -63,7 +64,7 @@ fn word_freqs(posts: &[RawPostFeatures]) -> BTreeMap<String, u64> {
 
 fn main() {
     let posts = get_train_data();
-    let (rust, play): (Vec<RawPostFeatures>, Vec<RawPostFeatures>) =
+    let (rust, _play): (Vec<RawPostFeatures>, Vec<RawPostFeatures>) =
         posts.into_iter().partition(|post| post.subreddit == "rust");
 
     let mut rust_word_freq: Vec<(String, u64)> = word_freqs(&rust[..]).into_iter().collect();

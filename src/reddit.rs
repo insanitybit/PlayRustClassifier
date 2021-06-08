@@ -1,11 +1,11 @@
-use hyper::Client;
+// use hyper::Client;
 use rayon::prelude::*;
 use serde_json;
 use serde_json::Value;
-use std::io::prelude::*;
-use tiny_keccak::Keccak;
+// use std::io::prelude::*;
+// use tiny_keccak::Keccak;
 
-#[derive(Deserialize, Debug, Clone, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct RawPostFeatures {
     pub is_self: bool,
     pub author: String,
@@ -18,7 +18,7 @@ pub struct RawPostFeatures {
     pub title: String,
 }
 
-#[derive(Debug, Clone, RustcEncodable)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ProcessedPostFeatures {
     /// 0 if self, 1 if not self
     pub is_self: f32,
@@ -41,7 +41,7 @@ pub struct ProcessedPostFeatures {
 }
 
 pub struct RedditClient {
-    client: Client,
+    client: reqwest::blocking::Client,
 }
 
 fn feature_from_value(value: &serde_json::Value) -> RawPostFeatures {
@@ -57,27 +57,23 @@ pub fn get_posts(data: Vec<serde_json::Value>) -> Vec<RawPostFeatures> {
     let mut raw_features = Vec::with_capacity(data.len());
     data.par_iter()
         .map(|data| feature_from_value(data))
-        .collect_into(&mut raw_features);
+        .collect_into_vec(&mut raw_features);
     raw_features
 }
 
 impl RedditClient {
     pub fn new() -> RedditClient {
         RedditClient {
-            client: Client::new(),
+            client: reqwest::blocking::Client::new(),
         }
     }
 
     pub fn get_raw_features_from_url(&mut self, url: &str) -> Vec<serde_json::Value> {
         let query = format!("{}.json", url);
 
-        let mut res = self.client.get(&query).send().unwrap();
+        let res = self.client.get(&query).send().unwrap();
 
-        let body = {
-            let mut s = String::new();
-            let _ = res.read_to_string(&mut s);
-            s
-        };
+        let body = res.text().expect("Couldn't parse body text");
 
         let data: Value = serde_json::from_str(&body).unwrap();
         let data = data.as_array().expect("Expected array");
@@ -113,13 +109,9 @@ impl RedditClient {
             }
         };
 
-        let mut res = self.client.get(&query).send().unwrap();
+        let res = self.client.get(&query).send().unwrap();
 
-        let body = {
-            let mut s = String::new();
-            let _ = res.read_to_string(&mut s);
-            s
-        };
+        let body = res.text().expect("Couldn't parse body text");
 
         let data: Value = serde_json::from_str(&body).unwrap();
         let data = data.as_object().unwrap();
@@ -139,7 +131,8 @@ impl RedditClient {
 }
 
 pub fn anonymize_author(author: &str, iter: u64, key: &[u8]) -> String {
-    let mut sha3 = Keccak::new_sha3_512();
+    use tiny_keccak::Hasher;
+    let mut sha3 = tiny_keccak::Sha3::v512();
 
     let mut res: [u8; 512] = [0; 512];
     let authbytes: Vec<u8> = From::from(author);
@@ -149,7 +142,7 @@ pub fn anonymize_author(author: &str, iter: u64, key: &[u8]) -> String {
     sha3.finalize(&mut res);
 
     for _ in 0..iter {
-        let mut sha3 = Keccak::new_sha3_512();
+        let mut sha3 = tiny_keccak::Sha3::v512();
         sha3.update(&res);
         sha3.update(&key);
         sha3.finalize(&mut res);

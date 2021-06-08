@@ -1,7 +1,3 @@
-#![feature(custom_derive, plugin)]
-#![plugin(serde_macros)]
-#![feature(test)]
-
 #[macro_use(time)]
 extern crate playrust_alert;
 
@@ -10,7 +6,6 @@ extern crate csv;
 extern crate dedup_by;
 extern crate rand;
 extern crate rayon;
-extern crate rustc_serialize;
 extern crate rustlearn;
 extern crate serde_json;
 extern crate stopwatch;
@@ -34,7 +29,7 @@ use rustlearn::metrics::accuracy_score;
 use rustlearn::prelude::*;
 use rustlearn::trees::decision_tree;
 
-use rand::{thread_rng, Rng, SeedableRng, StdRng};
+use rand::{thread_rng, StdRng};
 
 fn get_train_data() -> Vec<RawPostFeatures> {
     let matches = App::new("Model Generator")
@@ -50,9 +45,9 @@ fn get_train_data() -> Vec<RawPostFeatures> {
 
     let train_path = matches.value_of("train").unwrap();
 
-    let mut rdr = csv::Reader::from_file(train_path).unwrap();
+    let rdr = csv::Reader::from_path(train_path).unwrap();
 
-    let posts: Vec<RawPostFeatures> = rdr.decode().map(|raw_post| raw_post.unwrap()).collect();
+    let posts: Vec<RawPostFeatures> = rdr.into_deserialize().map(|v| v.expect("Failed to deserialize train data")).collect();
 
     let mut posts: Vec<RawPostFeatures> = posts
         .into_iter()
@@ -197,9 +192,10 @@ fn construct_matrix(post_features: &[ProcessedPostFeatures]) -> Array {
 }
 
 fn main() {
+    use rand::{Rng, SeedableRng};
     // Deserialize raw reddit post features from an input file, deduplicate by the title, and
     // then shuffle them.
-    let mut posts: Vec<_> = {
+    let posts: Vec<_> = {
         let mut posts = get_train_data();
         let mut rng = thread_rng();
         rng.shuffle(&mut posts);
@@ -244,7 +240,7 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::playrust_alert::feature_extraction::subs_to_float;
-    use super::*;
+
     #[test]
     fn test_subs_to_float() {
         let subs = vec!["a", "b", "c", "c", "b", "d", "a"];

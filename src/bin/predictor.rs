@@ -1,14 +1,11 @@
-#![feature(test, custom_derive, plugin)]
-
 #[macro_use(time)]
 extern crate playrust_alert;
 
 extern crate clap;
 extern crate csv;
-extern crate rustc_serialize;
 extern crate rustlearn;
 
-use clap::{App, Arg};
+// use clap::{App, Arg};
 
 use playrust_alert::feature_extraction::{
     check_for_code, convert_author_to_popularity, convert_is_self, interesting_word_freq,
@@ -137,24 +134,23 @@ fn construct_matrix(post_features: &[ProcessedPostFeatures]) -> Array {
     features
 }
 
-fn get_pred_data() -> Vec<RawPostFeatures> {
-    let matches = App::new("PlayRust Predictor")
-        .version("1.0")
-        .about("Given a series of reddit posts, predicts which sub they came from")
-        .arg(
-            Arg::with_name("pred")
-                .help("The CSV to predict against")
-                .required(true)
-                .index(1),
-        )
-        .get_matches();
+// fn get_pred_data() -> Vec<RawPostFeatures> {
+//     let matches = App::new("PlayRust Predictor")
+//         .version("1.0")
+//         .about("Given a series of reddit posts, predicts which sub they came from")
+//         .arg(
+//             Arg::with_name("pred")
+//                 .help("The CSV to predict against")
+//                 .required(true)
+//                 .index(1),
+//         )
+//         .get_matches();
 
-    let pred_path = matches.value_of("pred").unwrap();
+//     let pred_path = matches.value_of("pred").unwrap();
 
-    let mut rdr = csv::Reader::from_file(pred_path).unwrap();
-
-    rdr.decode().map(|raw_post| raw_post.unwrap()).collect()
-}
+//     let rdr = csv::Reader::from_path(pred_path).unwrap();
+//     rdr.into_deserialize().map(|v| v.expect("Failed to deserialize pred_data csv")).collect()
+// }
 
 // fn predict(r: &mut Request) -> PencilResult {
 //     let url = r.get_json().unwrap().as_string();

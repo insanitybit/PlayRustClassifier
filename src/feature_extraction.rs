@@ -1,7 +1,7 @@
 use regex::Regex;
 // use rsml::tfidf_helper::*;
 // use tfidf::{TfIdf, TfIdfDefault};
-use std::ascii::AsciiExt;
+// use std::ascii::AsciiExt;
 use std::collections::{BTreeMap, HashMap};
 
 use fnv::FnvHasher;
@@ -115,8 +115,8 @@ fn depluralize(s: &str) -> &str {
 
 fn should_replace(c: u8) -> bool {
     match c {
-        97...122 => true,
-        65...90 => true,
+        97..=122 => true,
+        65..=90 => true,
         _ => false,
     }
 }

@@ -28,16 +28,16 @@ fn main() {
 
     // let mut raw_posts = Vec::with_capacity(1000);
 
-    let mut wtr = csv::Writer::from_file(format!("./{}.csv", sub)).unwrap();
+    let mut wtr = csv::Writer::from_path(format!("./{}.csv", sub)).unwrap();
     let mut after = None;
-
     loop {
         println!("fetching");
         let (features, new_after) = client.get_raw_features(&sub, 100, &after);
         after = new_after;
         let posts = get_posts(features);
         for record in posts.into_iter() {
-            let _ = wtr.encode(record);
+            let _ = wtr.serialize(record).expect("CSV writer error");
+            wtr.flush().expect("CSV writer flush error");
         }
 
         if after.is_none() {
