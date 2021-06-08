@@ -1,9 +1,5 @@
 use ndarray::{ArrayBase, Dimension, ViewRepr};
-
-use rustc_serialize::{Encodable, Decodable};
-
-use bincode::SizeLimit;
-use bincode::rustc_serialize::{encode, decode};
+use serde::Serialize;
 
 use std::fs::File;
 use std::io::prelude::*;
@@ -28,40 +24,47 @@ pub fn load_list(path: &str) -> Vec<String> {
 }
 
 pub fn write_ndarray<T: Dimension>(nd: ArrayBase<ViewRepr<&f64>, T>, path: &str) {
-    let mut wtr = Writer::from_file(format!("./data/{}.csv", path)).unwrap();
-    // wtr.encode(nd);
-    for record in nd.inner_iter() {
-        let _ = wtr.encode(record);
+    let mut writer = Writer::from_path(format!("./data/{}.csv", path)).unwrap();
+    for record in nd.rows() {
+        let slice = record.to_slice().expect("Expected float values");
+        let mut byte_slices: Vec<[u8; 8]> = vec![];
+        for v in slice {
+            byte_slices.push(v.to_be_bytes())
+        }
+        // let byte_slices: &[[u8; 8]] = slice.iter().map(|v| v.to_le_bytes()).collect_slice();
+        let _ = writer.write_record(byte_slices).expect("CSV writer error");
+        writer.flush().expect("Flushing writer failed");
     }
 }
 
-pub fn write_csv_vec<T: Encodable>(v: &[Vec<T>], path: &str) {
-    let mut wtr = Writer::from_file(path).unwrap();
-    for record in v {
-        let _ = wtr.encode(record);
-    }
-}
+// pub fn write_csv_vec<T: Serialize>(v: &[Vec<T>], path: &str) {
+//     let mut writer = Writer::from_path(path).unwrap();
+//     for record in v {
+//         let _ = writer.write_record(record).expect("CSV writer error");
+//         writer.flush();
+//     }
+// }
 
-pub fn write_csv<T: Encodable>(nd: &T, path: &str) {
-    let mut wtr = Writer::from_file(path).unwrap();
-    wtr.encode(nd);
-    // for record in nd.inner_iter() {
-    //     let _ = wtr.encode(record);
-    // }
-}
+// pub fn write_csv<T: Serialize + Iterator>(nd: &mut T, path: &str) {
+//     let mut writer = Writer::from_path(path).unwrap();
+//     writer.write_record(nd).expect("CSV writer error");
+//     writer.flush();
+// }
 
-pub fn deserialize_from_file<T: Decodable>(path: &str) -> T {
+// pub fn deserialize_from_file<'de, T: serde::Deserialize<'de>>(path: &str) -> T {
+pub fn deserialize_from_file(path: &str) -> rustlearn::ensemble::random_forest::RandomForest {
     let mut f = File::open(path).unwrap();
     let mut encoded = Vec::new();
 
     let _ = f.read_to_end(&mut encoded).unwrap();
-    decode(&encoded[..]).unwrap()
+    bincode::deserialize(&encoded[..]).unwrap()
 }
 
 pub fn serialize_to_file<T>(s: &T, path: &str)
-    where T: Encodable
+where
+    T: Serialize,
 {
-    let serialized: Vec<u8> = encode(&s, SizeLimit::Infinite).unwrap();
+    let serialized: Vec<u8> = bincode::serialize(s).unwrap();
 
     let mut f = File::create(path).unwrap();
     let _ = f.write_all(&serialized[..]);

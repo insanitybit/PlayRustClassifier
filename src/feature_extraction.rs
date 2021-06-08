@@ -1,11 +1,11 @@
 use regex::Regex;
 // use rsml::tfidf_helper::*;
 // use tfidf::{TfIdf, TfIdfDefault};
+// use std::ascii::AsciiExt;
 use std::collections::{BTreeMap, HashMap};
-use std::ascii::AsciiExt;
 
-use std::hash::BuildHasherDefault;
 use fnv::FnvHasher;
+use std::hash::BuildHasherDefault;
 
 pub fn convert_is_self(b: bool) -> f32 {
     if b {
@@ -16,7 +16,6 @@ pub fn convert_is_self(b: bool) -> f32 {
 }
 
 pub fn convert_author_to_popularity(authors: &[&str], rust_authors: &[&str]) -> Vec<f32> {
-
     let fnv = BuildHasherDefault::<FnvHasher>::default();
     let mut auth_count = HashMap::with_capacity_and_hasher(authors.len() + rust_authors.len(), fnv);
 
@@ -29,9 +28,10 @@ pub fn convert_author_to_popularity(authors: &[&str], rust_authors: &[&str]) -> 
             *f += 1f32;
         }
     }
-    authors.iter()
-           .map(|author| *auth_count.get(author).unwrap_or(&0f32))
-           .collect()
+    authors
+        .iter()
+        .map(|author| *auth_count.get(author).unwrap_or(&0f32))
+        .collect()
 }
 
 // pub fn text_to_docs<T: AsRef<str>>(texts: &[&str]) -> Vec<Vec<(String, usize)>> {
@@ -80,23 +80,29 @@ fn bool_to_f32(b: bool) -> f32 {
 
 pub fn check_for_code(self_texts: &[&str]) -> Vec<Vec<f32>> {
     lazy_static! {
-        static ref FN_REGEX: Regex = Regex::new(r".*fn [:alpha:]{1}[:word:]*\(.*\)").expect("fn_regex");
-        static ref LET_REGEX: Regex = Regex::new(r".*let( mut)? [:alpha:]{1}[:word:]*.* = .*;").expect("let_regex");
+        static ref FN_REGEX: Regex =
+            Regex::new(r".*fn [:alpha:]{1}[:word:]*\(.*\)").expect("fn_regex");
+        static ref LET_REGEX: Regex =
+            Regex::new(r".*let( mut)? [:alpha:]{1}[:word:]*.* = .*;").expect("let_regex");
         static ref IF_LET_REGEX: Regex = Regex::new(r".*if let .* = match").expect("if_let_regex");
-        static ref MACRO_REGEX: Regex = Regex::new(r".*[:alpha:]{1}[:word:]*! {0,1}[\{\(\[].*[\)\]\}]").expect("macro_regex");
+        static ref MACRO_REGEX: Regex =
+            Regex::new(r".*[:alpha:]{1}[:word:]*! {0,1}[\{\(\[].*[\)\]\}]").expect("macro_regex");
     }
 
-    self_texts.iter()
-              .map(|text| {
-                  vec![FN_REGEX.is_match(text),
-                       LET_REGEX.is_match(text),
-                       IF_LET_REGEX.is_match(text),
-                       MACRO_REGEX.is_match(text)]
-                      .into_iter()
-                      .map(|b| bool_to_f32(b))
-                      .collect()
-              })
-              .collect()
+    self_texts
+        .iter()
+        .map(|text| {
+            vec![
+                FN_REGEX.is_match(text),
+                LET_REGEX.is_match(text),
+                IF_LET_REGEX.is_match(text),
+                MACRO_REGEX.is_match(text),
+            ]
+            .into_iter()
+            .map(|b| bool_to_f32(b))
+            .collect()
+        })
+        .collect()
 }
 
 fn depluralize(s: &str) -> &str {
@@ -109,15 +115,17 @@ fn depluralize(s: &str) -> &str {
 
 fn should_replace(c: u8) -> bool {
     match c {
-        97...122 => true,
-        65...90 => true,
+        97..=122 => true,
+        65..=90 => true,
         _ => false,
     }
 }
 
 pub fn symbol_counts(self_texts: &[&str]) -> Vec<Vec<f32>> {
-    let symbols = ['_', '-', ';', ':', '!', '?', '.', '(', ')', '[', ']', '{', '}', '*', '/',
-                   '\\', '&', '%', '`', '+', '<', '=', '>', '|', '~', '$'];
+    let symbols = [
+        '_', '-', ';', ':', '!', '?', '.', '(', ')', '[', ']', '{', '}', '*', '/', '\\', '&', '%',
+        '`', '+', '<', '=', '>', '|', '~', '$',
+    ];
 
     let mut freq_matrix = Vec::with_capacity(self_texts.len());
 
@@ -150,13 +158,10 @@ pub fn symbol_counts(self_texts: &[&str]) -> Vec<Vec<f32>> {
     freq_matrix
 }
 
-
 pub fn get_words(sentence: &str) -> Vec<String> {
     let cleaned = sentence;
 
-    let cleaned: String = cleaned.chars()
-                                 .filter(|c| c.is_ascii())
-                                 .collect();
+    let cleaned: String = cleaned.chars().filter(|c| c.is_ascii()).collect();
 
     let mut cleaned: Vec<u8> = cleaned.bytes().collect();
 
@@ -165,7 +170,6 @@ pub fn get_words(sentence: &str) -> Vec<String> {
             *c = b' ';
         }
     }
-
 
     // let cleaned: Vec<_> = cleaned.into_iter()
     //                              .filter(|c| !should_drop(*c))
@@ -176,25 +180,20 @@ pub fn get_words(sentence: &str) -> Vec<String> {
     let cleaned = unsafe { String::from_utf8_unchecked(cleaned) };
     let cleaned = cleaned.to_lowercase();
 
-
-    cleaned.split_whitespace()
-           .filter(|s| 2 < s.len() && s.len() < 10)
-           .map(|s| depluralize(s))
-           .filter(|s| 2 < s.len())
-           .map(String::from)
-           .collect()
+    cleaned
+        .split_whitespace()
+        .filter(|s| 2 < s.len() && s.len() < 10)
+        .map(|s| depluralize(s))
+        .filter(|s| 2 < s.len())
+        .map(String::from)
+        .collect()
 }
 
-
 pub fn interesting_word_freq(self_texts: &[&str], spec_words: &[String]) -> Vec<Vec<f32>> {
-
     let mut freq_matrix = Vec::with_capacity(self_texts.len());
-    let text_words: Vec<Vec<String>> = self_texts.iter()
-                                                 .map(|t| get_words(*t))
-                                                 .collect();
+    let text_words: Vec<Vec<String>> = self_texts.iter().map(|t| get_words(*t)).collect();
 
     let init_map = {
-
         let fnv = BuildHasherDefault::<FnvHasher>::default();
         let mut init_map = HashMap::with_capacity_and_hasher(spec_words.len(), fnv);
 
@@ -203,7 +202,6 @@ pub fn interesting_word_freq(self_texts: &[&str], spec_words: &[String]) -> Vec<
         }
         init_map
     };
-
 
     // time!({
     for words in text_words.iter() {
@@ -215,9 +213,7 @@ pub fn interesting_word_freq(self_texts: &[&str], spec_words: &[String]) -> Vec<
             }
         }
 
-        let freq_vec: Vec<_> = freq_map.values()
-                                       .cloned()
-                                       .collect();
+        let freq_vec: Vec<_> = freq_map.values().cloned().collect();
 
         freq_matrix.push(freq_vec);
     }
@@ -244,14 +240,14 @@ pub fn subs_to_float(subs: &[&str]) -> Vec<f32> {
     sub_floats
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_rust_code_search() {
-        let texts = vec!["Hey I need help with this function: pub fn get_stuff1(thing: &str) -> \
+        let texts = vec![
+            "Hey I need help with this function: pub fn get_stuff1(thing: &str) -> \
                           String {
                           let mut x: Option<_> = {Some(\"False\")};
 
@@ -260,14 +256,16 @@ mod tests {
                           }
 
                           return x;
-                        }"];
+                        }",
+        ];
         let r = check_for_code(&texts[..]);
         assert_eq!(r[0], vec![1f32, 1f32, 1f32, 1f32]);
     }
 
     #[test]
     fn test_symbol_freq() {
-        let texts = vec!["Hey I need help with this function: pub fn get_stuff1(thing: &str) -> \
+        let texts = vec![
+            "Hey I need help with this function: pub fn get_stuff1(thing: &str) -> \
                           String {
                           let mut x: Option<_> = {Some(\"False\")};
 
@@ -276,12 +274,16 @@ mod tests {
                           }
 
                           return x;
-                        }"];
+                        }",
+        ];
         let s = symbol_counts(&texts[..]);
-        assert_eq!(s[0],
-                   vec![2f32, 1f32, 3f32, 4f32, 1f32, 1f32, 0f32, 4f32, 4f32, 0f32, 0f32, 4f32,
-                        4f32, 0f32, 0f32, 0f32, 1f32, 0f32, 0f32, 0f32, 1f32, 2f32, 2f32, 0f32,
-                        0f32, 0f32]);
+        assert_eq!(
+            s[0],
+            vec![
+                2f32, 1f32, 3f32, 4f32, 1f32, 1f32, 0f32, 4f32, 4f32, 0f32, 0f32, 4f32, 4f32, 0f32,
+                0f32, 0f32, 1f32, 0f32, 0f32, 0f32, 1f32, 2f32, 2f32, 0f32, 0f32, 0f32
+            ]
+        );
     }
 
     #[test]
@@ -289,18 +291,22 @@ mod tests {
         let authors = vec!["steveklabnik", "staticassert", "illogiq", "illogiq"];
         let popularity = vec![1f32, 1f32, 2f32, 2f32];
 
-        assert_eq!(convert_author_to_popularity(&authors[..], &authors[..]),
-                   popularity);
+        assert_eq!(
+            convert_author_to_popularity(&authors[..], &authors[..]),
+            popularity
+        );
     }
 
     #[test]
     fn test_word_freq() {
         let texts = vec!["the lazy brown fox jumped quickly = over the lazy fence"];
-        let interesting_words = vec!["fence".to_owned(),
-                                     "juniper".to_owned(),
-                                     "lazy".to_owned(),
-                                     "orange".to_owned(),
-                                     "quickly".to_owned()];
+        let interesting_words = vec![
+            "fence".to_owned(),
+            "juniper".to_owned(),
+            "lazy".to_owned(),
+            "orange".to_owned(),
+            "quickly".to_owned(),
+        ];
 
         let expected = vec![1f32, 2f32, 0f32, 1f32, 0f32];
 
